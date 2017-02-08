@@ -1,16 +1,13 @@
 package org.broadinstitute.hellbender.tools.exome.segmentation;
 
-import com.google.common.primitives.Doubles;
 import htsjdk.samtools.util.Locatable;
 import org.broadinstitute.hellbender.tools.exome.alleliccount.AllelicCount;
-import org.broadinstitute.hellbender.utils.MathUtils;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
 import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.hmm.HiddenMarkovModel;
 import org.broadinstitute.hellbender.utils.param.ParamUtils;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -36,15 +33,14 @@ import java.util.stream.IntStream;
 public abstract class ClusteringGenomicHMM<DATA, HIDDEN> implements HiddenMarkovModel<DATA, SimpleInterval, Integer> {
     private final double memoryLength;
     private final List<HIDDEN> hiddenStateValues;
-    private final List<Double> weights;
+    private final int K;
+    private final double logK;
 
-    public ClusteringGenomicHMM(final List<HIDDEN> hiddenStateValues, final List<Double> weights, final double memoryLength) {
+    public ClusteringGenomicHMM(final List<HIDDEN> hiddenStateValues, final double memoryLength) {
         this.hiddenStateValues = new ArrayList<>(Utils.nonNull(hiddenStateValues));
-        Utils.nonNull(weights);
-        weights.forEach(w -> ParamUtils.isPositiveOrZero(w, "weights may not be negative."));
+        K = hiddenStateValues.size();
+        logK = Math.log(K);
         Utils.nonEmpty(hiddenStateValues, "must have at least one hidden state");
-
-        this.weights = Doubles.asList(MathUtils.normalizeFromRealSpace(weights.stream().mapToDouble(x->x).toArray()));
         this.memoryLength = ParamUtils.isPositive(memoryLength, "CNV memory length must be positive");
     }
 
@@ -56,7 +52,7 @@ public abstract class ClusteringGenomicHMM<DATA, HIDDEN> implements HiddenMarkov
 
     @Override
     public double logPriorProbability(final Integer state, final SimpleInterval position) {
-        return Math.log(weights.get(state));
+        return -logK;
     }
 
     // TODO: it's awkward that these are both required -- reason is that copy ratio emission is stored
@@ -70,11 +66,24 @@ public abstract class ClusteringGenomicHMM<DATA, HIDDEN> implements HiddenMarkov
                                            final Integer nextState, final SimpleInterval nextPosition) {
         return logTransitionProbability(currentState, nextState, calculateDistance(currentPosition, nextPosition));
     }
+
+    @Override
+    public void fillLogTransitionMatrix(final double[][] logTransitionMatrixBuffer, final SimpleInterval fromPosition, final SimpleInterval toPosition) {
+        final double distance = calculateDistance(fromPosition, toPosition);
+        final double decay = Math.exp(-distance / memoryLength);
+        final double offDiagonalTerm = Math.log1p(-decay) - logK;
+        final double diagonalTerm = Math.log(decay + (1 - decay)/K);
+        for (int fromState = 0; fromState < K; fromState++) {
+            for (int toState = 0; toState < K; toState++) {
+                logTransitionMatrixBuffer[fromState][toState] = fromState == toState ? diagonalTerm : offDiagonalTerm;
+            }
+        }
+    }
     // Done with implementation ----------------------------------------------------------------------------------------
 
     private double logTransitionProbability(final Integer currentState, final Integer nextState, final double distance) {
         final double pRemember = Math.exp(-distance / memoryLength);
-        return Math.log((nextState.equals(currentState) ? pRemember : 0) + (1 - pRemember)*weights.get(nextState));
+        return Math.log((nextState.equals(currentState) ? pRemember : 0) + (1 - pRemember) / K);
     }
 
     public static double calculateDistance(final Locatable from, final Locatable to) {
@@ -88,6 +97,5 @@ public abstract class ClusteringGenomicHMM<DATA, HIDDEN> implements HiddenMarkov
     }
 
     public double getMemoryLength() { return memoryLength; }
-    public double getWeight(final int k) { return weights.get(k); }
     public HIDDEN getHiddenStateValue(final int state) { return hiddenStateValues.get(state); }
 }

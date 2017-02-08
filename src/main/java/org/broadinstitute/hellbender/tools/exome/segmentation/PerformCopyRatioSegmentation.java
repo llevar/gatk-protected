@@ -19,8 +19,8 @@ import java.util.List;
  * Created by davidben on 5/23/16.
  */
 @CommandLineProgramProperties(
-        summary = "Segment genomic data into regions of constant copy ratio.  Only supports one sample input.",
-        oneLineSummary = "Segment genomic data into regions of constant copy ratio",
+        summary = "(EXPERIMENTAL) Segment genomic data into regions of constant copy ratio.  Only supports one sample input.",
+        oneLineSummary = "(EXPERIMENTAL) Segment genomic data into regions of constant copy ratio",
         programGroup = CopyNumberProgramGroup.class
 )
 public final class PerformCopyRatioSegmentation extends CommandLineProgram {

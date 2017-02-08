@@ -18,8 +18,8 @@ import java.util.List;
  * Created by davidben on 5/23/16.
  */
 @CommandLineProgramProperties(
-        summary = "Segment genomic data into regions of constant minor allele fraction.  Only supports one sample input.",
-        oneLineSummary = "Segment genomic data into regions of constant minor allele fraction",
+        summary = "(EXPERIMENTAL) Segment genomic data into regions of constant minor allele fraction.  Only supports one sample input.",
+        oneLineSummary = "(EXPERIMENTAL) Segment genomic data into regions of constant minor allele fraction",
         programGroup = CopyNumberProgramGroup.class
 )
 public final class PerformAlleleFractionSegmentation extends CommandLineProgram {
@@ -64,7 +64,7 @@ public final class PerformAlleleFractionSegmentation extends CommandLineProgram 
         final AllelicPanelOfNormals allelicPoN =
                 allelicPoNFile != null ? AllelicPanelOfNormals.read(allelicPoNFile) : AllelicPanelOfNormals.EMPTY_PON;
         final AllelicCountCollection acc = new AllelicCountCollection(snpCountsFile);
-        final AlleleFractionSegmenter segmenter = new AlleleFractionSegmenter(initialNumStates, acc, allelicPoN);
+        final AlleleFractionSegmenter segmenter = new AlleleFractionSegmenter(initialNumStates, acc);
         final List<ModeledSegment> segments = segmenter.getModeledSegments();
 
         SegmentUtils.writeModeledSegmentFile(outputSegmentsFile, segments, sampleName, true);
