@@ -36,14 +36,10 @@ public class SomaticGenotypingEngine extends AssemblyBasedCallerGenotypingEngine
     public static final String IN_COSMIC_VCF_ATTRIBUTE = "IN_COSMIC";
     public static final String IN_DBSNP_VCF_ATTRIBUTE = "IN_DBSNP";
     public static final String IN_PON_VCF_ATTRIBUTE = "IN_PON";
-<<<<<<< c12df171371d8e5632405d9e7c7cb2ee91449728
     public static final String NORMAL_ARTIFACT_LOD_ATTRIBUTE = "N_ART_LOD";
-=======
     public static final String STRAND_ARTIFACT_POSTERIOR_PROBABILITIES_KEY = "STRAND_ARTIFACT_POSTERIOR_PROBABILITIES";
->>>>>>> gotta normalized probabilities
 
     private final M2ArgumentCollection MTAC;
-    private final TumorPowerCalculator strandArtifactPowerCalculator;
 
     private final String tumorSampleName;
     private final String matchedNormalSampleName;
@@ -79,7 +75,6 @@ public class SomaticGenotypingEngine extends AssemblyBasedCallerGenotypingEngine
         hasNormal = matchedNormalSampleName != null;
 
         final double errorProbability = QualityUtils.qualToErrorProb(MTAC.POWER_CONSTANT_QSCORE);
-        strandArtifactPowerCalculator = new TumorPowerCalculator(errorProbability, MTAC.STRAND_ARTIFACT_LOD_THRESHOLD, 0.0f);
     }
 
     /**
