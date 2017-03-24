@@ -122,6 +122,17 @@ public class Mutect2FilteringEngine {
     }
 
     private static void applyStrandBiasFilter(final M2FiltersArgumentCollection MTFAC, final VariantContext vc, final Collection<String> filters) {
+        double[] posteriorProbabilities = GATKProtectedVariantContextUtils.getAttributeAsDoubleArray(
+                vc, (SomaticGenotypingEngine.STRAND_ARTIFACT_POSTERIOR_PROBABILITIES_KEY), () -> null, -1);
+        double artifactForward = posteriorProbabilities[SomaticGenotypingEngine.ARTIFACT_FWD];
+        double artifactReverse = posteriorProbabilities[SomaticGenotypingEngine.ARTIFACT_REV];
+        if (artifactForward > 0.5 || artifactReverse > 0.5){
+            filters.add(GATKVCFConstants.STRAND_ARTIFACT_FILTER_NAME);
+        }
+
+    }
+
+    private static void applyOldStrandBiasFilterl(final M2FiltersArgumentCollection MTFAC, final VariantContext vc, final Collection<String> filters) {
         if (MTFAC.ENABLE_STRAND_ARTIFACT_FILTER) {
             if (vc.hasAttribute(GATKVCFConstants.TLOD_FWD_KEY) && vc.hasAttribute(GATKVCFConstants.TLOD_REV_KEY)
                     && vc.hasAttribute(GATKVCFConstants.TUMOR_SB_POWER_FWD_KEY) && vc.hasAttribute(GATKVCFConstants.TUMOR_SB_POWER_REV_KEY)) {

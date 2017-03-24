@@ -37,7 +37,7 @@ public class SomaticGenotypingEngine extends AssemblyBasedCallerGenotypingEngine
     public static final String IN_DBSNP_VCF_ATTRIBUTE = "IN_DBSNP";
     public static final String IN_PON_VCF_ATTRIBUTE = "IN_PON";
     public static final String NORMAL_ARTIFACT_LOD_ATTRIBUTE = "N_ART_LOD";
-    public static final String STRAND_ARTIFACT_POSTERIOR_PROBABILITIES_KEY = "STRAND_ARTIFACT_POSTERIOR_PROBABILITIES";
+    public static final String STRAND_ARTIFACT_POSTERIOR_PROBABILITIES_KEY = "STRAND_ART_POST_PROB";
 
     private final M2ArgumentCollection MTAC;
 
@@ -158,7 +158,6 @@ public class SomaticGenotypingEngine extends AssemblyBasedCallerGenotypingEngine
 
             //TODO: multiple alt alleles -- per-allele strand bias
             final List<Allele> allSomaticAlleles = ListUtils.union(Arrays.asList(mergedVC.getReference()), somaticAltAlleles);
-            final Allele alleleWithHighestTumorLOD = somaticAltAlleles.get(0);
             addStrandBiasAnnotations(readAlleleLikelihoods, callVcb, allSomaticAlleles);
 
             if (!featureContext.getValues(MTAC.cosmicFeatureInput, loc).isEmpty()) {
@@ -237,6 +236,22 @@ public class SomaticGenotypingEngine extends AssemblyBasedCallerGenotypingEngine
         return new VariantContextBuilder(callVcb).alleles(allSomaticAlleles).genotypes(genotypes).make();
     }
 
+    // TODO: maybe use this instead of the numbers
+    // the latent variable Z in the strand artifact filter model
+    public enum StrandArtifactZ {
+        ART_PLUS(0), ART_MINUS(1), NO_ART(2);
+
+        private int index;
+        private StrandArtifactZ(int i){
+            index = i;
+        }
+
+        public int getIndex(){ return index; }
+    }
+
+
+    static final int ARTIFACT_FWD = 0, ARTIFACT_REV = 1, NO_ARTIFACT = 2; // TODO: should be an enum
+
     private void addStrandBiasAnnotations(final ReadLikelihoods<Allele> likelihoods,
                                           final VariantContextBuilder callVcb,
                                           final List<Allele> allSomaticAlleles) {
@@ -258,9 +273,10 @@ public class SomaticGenotypingEngine extends AssemblyBasedCallerGenotypingEngine
         final int numReadsReverse = tumorBestAllelesReverse.size(); // ditto
         final int numReads = numReadsForward + numReadsReverse;
 
-        final int ARTIFACT_FWD = 0, ARTIFACT_REV = 1, NO_ARTIFACT = 2;
+
 
         // prior probabilities for z
+        // How do we pick pi? TODO: ROC curve
         final double[] pi = new double[]{0.01, 0.01, 0.98};
 
         // compute the posterior probabilities

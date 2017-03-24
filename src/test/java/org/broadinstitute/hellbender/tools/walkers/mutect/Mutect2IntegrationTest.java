@@ -4,19 +4,21 @@ import htsjdk.variant.variantcontext.VariantContext;
 import junit.framework.Assert;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
+import org.bdgenomics.formats.avro.Variant;
 import org.broadinstitute.hellbender.CommandLineProgramTest;
 import org.broadinstitute.hellbender.Main;
 import org.broadinstitute.hellbender.engine.FeatureDataSource;
 import org.broadinstitute.hellbender.utils.Utils;
+import org.broadinstitute.hellbender.utils.variant.GATKVCFConstants;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 import java.io.File;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
+import java.util.stream.Stream;
+
+import static java.util.stream.StreamSupport.stream;
 
 /**
  * Created by davidben on 9/1/16.
@@ -108,7 +110,7 @@ public class Mutect2IntegrationTest extends CommandLineProgramTest {
         new Main().instanceMain(makeCommandLineArgs(Arrays.asList("-V", unfilteredVcf.getAbsolutePath(), "-O", filteredVcf.getAbsolutePath()), "FilterMutectCalls"));
 
 
-        final long numVariants = StreamSupport.stream(new FeatureDataSource<VariantContext>(filteredVcf).spliterator(), false)
+        final long numVariants = stream(new FeatureDataSource<VariantContext>(filteredVcf).spliterator(), false)
                 .filter(vc -> vc.getFilters().isEmpty()).count();
 
         Assert.assertEquals(numVariants, 0);
@@ -139,7 +141,7 @@ public class Mutect2IntegrationTest extends CommandLineProgramTest {
         };
 
         runCommandLine(args);
-        final long numVariants = StreamSupport.stream(new FeatureDataSource<VariantContext>(outputVcf).spliterator(), false).count();
+        final long numVariants = stream(new FeatureDataSource<VariantContext>(outputVcf).spliterator(), false).count();
         Assert.assertTrue(numVariants < 4);
     }
 
@@ -199,11 +201,11 @@ public class Mutect2IntegrationTest extends CommandLineProgramTest {
 
     //TODO: bring this to HaplotypeCallerIntegrationTest
     private Pair<Double, Double> calculateConcordance(final File outputVcf, final File truthVcf ) {
-        final Set<String> outputKeys = StreamSupport.stream(new FeatureDataSource<VariantContext>(outputVcf).spliterator(), false)
+        final Set<String> outputKeys = stream(new FeatureDataSource<VariantContext>(outputVcf).spliterator(), false)
                 .filter(vc -> vc.getFilters().isEmpty())
                 .filter(vc -> ! vc.isSymbolicOrSV())
                 .map(vc -> keyForVariant(vc)).collect(Collectors.toSet());
-        final Set<String> truthKeys = StreamSupport.stream(new FeatureDataSource<VariantContext>(truthVcf).spliterator(), false)
+        final Set<String> truthKeys = stream(new FeatureDataSource<VariantContext>(truthVcf).spliterator(), false)
                 .filter(vc -> vc.getFilters().isEmpty())
                 .filter(vc -> ! vc.isSymbolicOrSV())
                 .map(vc -> keyForVariant(vc)).collect(Collectors.toSet());
@@ -212,13 +214,13 @@ public class Mutect2IntegrationTest extends CommandLineProgramTest {
         final long falsePositives = outputKeys.size() - truePositives;
 
         // for debugging
-        final List<VariantContext> falseNegatives = StreamSupport.stream(new FeatureDataSource<VariantContext>(truthVcf).spliterator(), false)
+        final List<VariantContext> falseNegatives = stream(new FeatureDataSource<VariantContext>(truthVcf).spliterator(), false)
                 .filter(vc -> vc.getFilters().isEmpty())
                 .filter(vc -> ! vc.isSymbolicOrSV())
                 .filter(vc -> !outputKeys.contains(keyForVariant(vc)))
                 .collect(Collectors.toList());
 
-        final List<VariantContext> falsePositivesList = StreamSupport.stream(new FeatureDataSource<VariantContext>(outputVcf).spliterator(), false)
+        final List<VariantContext> falsePositivesList = stream(new FeatureDataSource<VariantContext>(outputVcf).spliterator(), false)
                 .filter(vc -> vc.getFilters().isEmpty())
                 .filter(vc -> !truthKeys.contains(keyForVariant(vc)))
                 .collect(Collectors.toList());
@@ -232,6 +234,77 @@ public class Mutect2IntegrationTest extends CommandLineProgramTest {
     private static String keyForVariant( final VariantContext variant ) {
         return String.format("%s:%d-%d %s", variant.getContig(), variant.getStart(), variant.getEnd(), variant.getAlleles());
     }
+
+    @Test(dataProvider = "dreamSyntheticData")
+    public void testStrandArtifactFilter(final File tumorBam, final String tumorSample, final File normalBam, final String normalSample, final File truthVcf, final double requiredSensitivity) throws Exception {
+        Utils.resetRandomGenerator();
+        final File unfilteredVcf = createTempFile("unfiltered", ".vcf");
+        final File filteredVcf = createTempFile("filtered", ".vcf");
+
+        final String[] args = {
+                "-I", tumorBam.getAbsolutePath(),
+                "-tumor", tumorSample,
+                "-I", normalBam.getAbsolutePath(),
+                "-normal", normalSample,
+                "-R", b37_reference_20_21,
+                "-L", "20",
+                "-O", unfilteredVcf.getAbsolutePath()
+        };
+
+        runCommandLine(args);
+
+        // run FilterMutectCalls
+        new Main().instanceMain(makeCommandLineArgs(Arrays.asList("-V", unfilteredVcf.getAbsolutePath(), "-O", filteredVcf.getAbsolutePath()), "FilterMutectCalls"));
+
+        // test sensitivity of the filter; that is, the filter must detect strand artifact at these sites
+        // known variants with strand artifact in chromosome 20
+        // These are the sites flagged as strand artifact in the Mutect1-style filter and verified in IGV by Takuto
+        final int[] knownStrandArtifactPositions = new int[]{ 3371232, 10521173, 14147359, 15742397, 30984184, 34590402, 55011792, 61545923 };
+        // these are close: should they be filtered? 56090916
+
+        for (final int position : knownStrandArtifactPositions) {
+            Optional<VariantContext> variant = stream(new FeatureDataSource<VariantContext>(filteredVcf).spliterator(), false)
+                    .filter(vc -> vc.getStart() == position).findAny();
+            Assert.assertTrue(variant.get().getFilters().contains(GATKVCFConstants.STRAND_ARTIFACT_FILTER_NAME)); // use orElseGet?
+        }
+
+        // now check that the filter is not overly sensitive. These sites are known variants (true positives) in DREAM
+        // that we have filtered before
+        // new int [] { 3371232, 10521173, 14147359,
+
+        // Find new truth set
+//        tsato@gsa5:dream: ls /dsde/working/davidben/dream/synthetic/original_vcfs/
+//                synthetic.challenge.set1.tumor.all.truth.vcf*
+//                synthetic.challenge.set2.tumor.all.truth.vcf*
+//                synthetic.challenge.set3.tumor.20pctmasked.truth.vcf*
+//                synthetic.challenge.set4.tumour.25pctmasked.truth.vcf*
+//                synthetic.challenge.set5.tumour.truth.30pctmasked.vcf*
+//        tsato@gsa5:dream: ls /dsde/working/davidben/dream/synthetic/
+//.DS_Store                     original_bams_symlinks/       simplified_vcfs/
+//                README                        original_vcfs/                snv_indel_vcfs/
+//                chr_20_variant_interval_bams/ pad_vcf.py                    subset_bam.sh
+//        lee/                          padding200/                   variant_bams.sh
+//        lee_bams.sh                   padding500/
+//        tsato@gsa5:dream: ls /dsde/working/davidben/dream/synthetic/snv_indel_vcfs/
+
+
+        // CRSP sensitivity
+        // /dsde/working/davidben/mutect/validations/crsp
+    }
+
+
+    // TODO add strand artifact tests
+    //
+    //20      3371232 .       G       GATCGTCCGCCTC   .       strand_artifact ECNT=1;HCNT=1;MAX_ED=.;MIN_ED=.;NLOD=13.58;TLOD=20.79;TLOD_FWD=
+    //        20      10521173        .       A       C       .       strand_artifact ECNT=1;HCNT=1;MAX_ED=.;MIN_ED=.;NLOD=15.00;TLOD=17.55;TLOD_FWD=
+    //        20      14147359        .       GCAGTTTTTTCTT   G       .       strand_artifact ECNT=1;HCNT=1;MAX_ED=.;MIN_ED=.;NLOD=12.63;TLOD=32.96;T
+    //20      15742397        .       C       T       .       strand_artifact ECNT=1;HCNT=1;MAX_ED=.;MIN_ED=.;NLOD=10.18;TLOD=29.85;TLOD_FWD=
+    //        20      30984184        .       GTTAGCTGGAAACTAATTCTTTTGAGGCTTGC        G       .       strand_artifact ECNT=1;HCNT=1;MAX_ED=.;MIN_ED=.
+    //        20      34590402        .       GGGGTTTCGCC     G       .       strand_artifact ECNT=1;HCNT=1;MAX_ED=.;MIN_ED=.;NLOD=10.52;TLOD=27.14;T
+    //20      55011792        .       A       AAATCGACTACTACATCG      .       strand_artifact ECNT=1;HCNT=1;MAX_ED=.;MIN_ED=.;NLOD=13.62;TLOD
+    //20      56090916        .       T       A       .       strand_artifact ECNT=1;HCNT=1;MAX_ED=.;MIN_ED=.;NLOD=12.64;TLOD=13.05;TLOD_FWD=
+    //        20      61545923        .       A       AATCACGCAGACGCTTCGCAGGCGTAT     .       strand_artifact EC
+
 
 
 }
