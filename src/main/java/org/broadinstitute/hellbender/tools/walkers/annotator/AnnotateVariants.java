@@ -94,11 +94,14 @@ public class AnnotateVariants extends VariantWalker {
 
     @Override
     public void apply(final VariantContext vc, final ReadsContext readsContext, final ReferenceContext refContext, final FeatureContext fc) {
+        refContext.setWindow(20, 20);
+
         final SimpleInterval refWindow = refContext.getWindow();
 
         final Haplotype refHaplotype = createReferenceHaplotype(refContext);
+        refHaplotype.setGenomeLocation(vc);
         final List<Haplotype> variantHaplotypes = ReadThreadingAssembler.composeGivenHaplotypes(refHaplotype, Arrays.asList(vc), refWindow);
-
+        variantHaplotypes.forEach(h -> h.setGenomeLocation(vc));
         final AssemblyRegion assemblyRegion = new AssemblyRegion(refWindow, 0, bamHeader);
 
         // NOTE: we don't actually perform assembly here!
@@ -107,7 +110,11 @@ public class AnnotateVariants extends VariantWalker {
         variantHaplotypes.forEach(assemblyResultSet::add);
         assemblyResultSet.setRegionForGenotyping(assemblyRegion);
 
-        final Map<String,List<GATKRead>> reads = AssemblyBasedCallerUtils.splitReadsBySample(sampleList, bamHeader, assemblyRegion.getReads());
+        final List<GATKRead> readList = new ArrayList<>();
+        readsContext.forEach(readList::add);
+
+
+        final Map<String,List<GATKRead>> reads = AssemblyBasedCallerUtils.splitReadsBySample(sampleList, bamHeader, readList);
 
         final ReadLikelihoods<Haplotype> readLikelihoods = likelihoodCalculationEngine.computeReadLikelihoods(assemblyResultSet, sampleList, reads);
         final Map<GATKRead,GATKRead> readRealignments = AssemblyBasedCallerUtils.realignReadsToTheirBestHaplotype(readLikelihoods, assemblyResultSet.getReferenceHaplotype(), assemblyResultSet.getPaddedReferenceLoc());
