@@ -164,7 +164,7 @@ public final class ReadThreadingAssembler {
      *
      * @return a non-null list of haplotypes
      */
-    private static List<Haplotype> composeGivenHaplotypes(final Haplotype refHaplotype, final List<VariantContext> givenHaplotypes, final SimpleInterval activeRegionWindow) {
+    public static List<Haplotype> composeGivenHaplotypes(final Haplotype refHaplotype, final List<VariantContext> givenHaplotypes, final SimpleInterval activeRegionWindow) {
         Utils.nonNull(refHaplotype, "the reference haplotype cannot be null");
         Utils.nonNull(givenHaplotypes, "given haplotypes cannot be null");
         Utils.nonNull(activeRegionWindow, "active region window cannot be null");
