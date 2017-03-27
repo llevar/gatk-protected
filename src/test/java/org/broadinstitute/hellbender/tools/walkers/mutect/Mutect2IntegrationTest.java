@@ -46,7 +46,7 @@ public class Mutect2IntegrationTest extends CommandLineProgramTest {
     public void testDreamTumorNormal(final File tumorBam, final String tumorSample, final File normalBam, final String normalSample, final File truthVcf, final double requiredSensitivity) throws Exception {
         final File annotatedVcf = createTempFile("annotated", ".vcf");
 
-        new Main().instanceMain(makeCommandLineArgs(Arrays.asList("-R", b37_reference_20_21, "-I", tumorBam.getAbsolutePath(), "-V", truthVcf.getAbsolutePath(), "-O", annotatedVcf.getAbsolutePath(), "-A", "ClippingRankSumTest"), "AnnotateVariants"));
+        new Main().instanceMain(makeCommandLineArgs(Arrays.asList("-R", b37_reference_20_21, "-I", tumorBam.getAbsolutePath(), "-V", truthVcf.getAbsolutePath(), "-O", annotatedVcf.getAbsolutePath()), "AnnotateVariants"));
 
 
         Utils.resetRandomGenerator();

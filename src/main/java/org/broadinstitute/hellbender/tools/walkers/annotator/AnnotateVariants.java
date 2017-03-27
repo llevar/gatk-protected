@@ -2,9 +2,14 @@ package org.broadinstitute.hellbender.tools.walkers.annotator;
 
 import htsjdk.samtools.SAMFileHeader;
 import htsjdk.variant.variantcontext.VariantContext;
+import htsjdk.variant.variantcontext.VariantContextBuilder;
 import htsjdk.variant.variantcontext.writer.VariantContextWriter;
 import htsjdk.variant.vcf.VCFHeader;
 import htsjdk.variant.vcf.VCFHeaderLine;
+import htsjdk.variant.vcf.VCFHeaderLineType;
+import htsjdk.variant.vcf.VCFInfoHeaderLine;
+import org.apache.commons.math3.exception.MathIllegalArgumentException;
+import org.apache.commons.math3.stat.descriptive.rank.Median;
 import org.broadinstitute.barclay.argparser.Argument;
 import org.broadinstitute.barclay.argparser.CommandLineProgramProperties;
 import org.broadinstitute.hellbender.cmdline.StandardArgumentDefinitions;
@@ -43,48 +48,55 @@ public class AnnotateVariants extends VariantWalker {
 
 
     private VariantContextWriter vcfWriter;
-    private  SAMFileHeader bamHeader;
-    private org.broadinstitute.hellbender.utils.genotyper.SampleList sampleList;
+
+    public static final String MEDIAN_ALT_POSITION_NAME = "MED_ALT_POS";
+    public static final String MEDIAN_ALT_CLIPPING_NAME = "MED_ALT_CLIP";
+    public static final String MEDIAN_ALT_COMPLEXITY_NAME = "MED_ALT_CIGAR";
+
 
     @Override
     public void onTraversalStart() {
         final VCFHeader inputHeader = getHeaderForVariants();
         final Set<VCFHeaderLine> headerLines = new HashSet<>(inputHeader.getMetaDataInSortedOrder());
-        final VCFHeader originalVcfHEader = new VCFHeader(headerLines, inputHeader.getGenotypeSamples());
+        headerLines.add(new VCFInfoHeaderLine(MEDIAN_ALT_POSITION_NAME, 1, VCFHeaderLineType.Float, "median alt distance from end of read"));
+        headerLines.add(new VCFInfoHeaderLine(MEDIAN_ALT_CLIPPING_NAME, 1, VCFHeaderLineType.Float, "median clipped bases in alt reads"));
+        headerLines.add(new VCFInfoHeaderLine(MEDIAN_ALT_COMPLEXITY_NAME, 1, VCFHeaderLineType.Float, "median number of cigar elements in alt reads"));
+
+        final VCFHeader vcfHeader = new VCFHeader(headerLines, inputHeader.getGenotypeSamples());
         vcfWriter = createVCFWriter(new File(outputVcf));
-
-        bamHeader = getHeaderForReads();
-        sampleList = new IndexedSampleList(new ArrayList<>(ReadUtils.getSamplesFromHeader(bamHeader)));
-
-
-        final Set<VCFHeaderLine> headerInfo = new HashSet<>(originalVcfHEader.getMetaDataInInputOrder());
-        headerInfo.addAll(annotationEngine.getVCFAnnotationDescriptions());
-
-        final VCFHeader newVcfHeader = new VCFHeader(headerInfo, sampleList.asListOfSamples());
-        newVcfHeader.setSequenceDictionary(getBestAvailableSequenceDictionary());
-        vcfWriter.writeHeader(newVcfHeader);
+        vcfWriter.writeHeader(vcfHeader);
     }
 
     @Override
     public void apply(final VariantContext vc, final ReadsContext readsContext, final ReferenceContext refContext, final FeatureContext fc) {
         final ReadPileup pileup = GATKProtectedVariantContextUtils.getPileup(vc, readsContext);
         final byte refBase = vc.getReference().getBases()[0];
+        if (vc.isSymbolicOrSV()) {
+            return;
+        }
 
-        final double averageAltPosition = Utils.stream(pileup)
-                .filter(pe -> pe.getBase() != refBase)
-                .mapToDouble(pe -> Math.min(pe.getRead().getLength() - pe.getOffset(), pe.getOffset()))
-                .average().orElseGet(() -> 0.0);
+        try {
+            final double medianAltPosition = new Median().evaluate(Utils.stream(pileup)
+                    .filter(pe -> pe.getBase() != refBase)
+                    .mapToDouble(pe -> Math.min(pe.getRead().getLength() - pe.getOffset(), pe.getOffset())).toArray());
 
-        final double averageAltClipping = Utils.stream(pileup)
-                .filter(pe -> pe.getBase() != refBase)
-                .mapToDouble(pe -> AlignmentUtils.getNumHardClippedBases(pe.getRead()))
-                .average().orElseGet(() -> 0.0);
+            final double medianAltClipping = new Median().evaluate(Utils.stream(pileup)
+                    .filter(pe -> pe.getBase() != refBase)
+                    .mapToDouble(pe -> AlignmentUtils.getNumHardClippedBases(pe.getRead())).toArray());
 
-        final double averageAltCigar = Utils.stream(pileup)
-                .filter(pe -> pe.getBase() != refBase)
-                .mapToDouble(pe -> pe.getRead().numCigarElements())
-                .average().orElseGet(() -> 0.0);
+            final double medianAltCigar = new Median().evaluate(Utils.stream(pileup)
+                    .filter(pe -> pe.getBase() != refBase)
+                    .mapToDouble(pe -> pe.getRead().numCigarElements())
+                    .toArray());
 
+            final VariantContext annotatedVariant = new VariantContextBuilder(vc).attribute(MEDIAN_ALT_POSITION_NAME, medianAltPosition)
+                    .attribute(MEDIAN_ALT_CLIPPING_NAME, medianAltClipping)
+                    .attribute(MEDIAN_ALT_COMPLEXITY_NAME, medianAltCigar).make();
+
+            vcfWriter.add(annotatedVariant);
+        } catch (MathIllegalArgumentException ex) {
+            vcfWriter.add(vc);
+        }
 
     }
 
