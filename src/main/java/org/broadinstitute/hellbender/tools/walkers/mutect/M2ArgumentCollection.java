@@ -106,5 +106,4 @@ public class M2ArgumentCollection extends AssemblyBasedCallerArgumentCollection 
      */
     @Argument(fullName = "group", shortName = "G", doc = "One or more classes/groups of annotations to apply to variant calls", optional = true)
     public List<String> annotationGroupsToUse = new ArrayList<>(Arrays.asList(new String[]{}));
-
 }
