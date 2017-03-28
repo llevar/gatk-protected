@@ -21,6 +21,7 @@ import org.broadinstitute.hellbender.engine.VariantWalker;
 import org.broadinstitute.hellbender.utils.GATKProtectedVariantContextUtils;
 import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.genotyper.IndexedSampleList;
+import org.broadinstitute.hellbender.utils.pileup.PileupElement;
 import org.broadinstitute.hellbender.utils.pileup.ReadPileup;
 import org.broadinstitute.hellbender.utils.read.AlignmentUtils;
 import org.broadinstitute.hellbender.utils.read.ReadUtils;
@@ -77,15 +78,15 @@ public class AnnotateVariants extends VariantWalker {
 
         try {
             final double medianAltPosition = new Median().evaluate(Utils.stream(pileup)
-                    .filter(pe -> pe.getBase() != refBase)
+                    .filter(pe -> isVariant(pe, refBase))
                     .mapToDouble(pe -> Math.min(pe.getRead().getLength() - pe.getOffset(), pe.getOffset())).toArray());
 
             final double medianAltClipping = new Median().evaluate(Utils.stream(pileup)
-                    .filter(pe -> pe.getBase() != refBase)
+                    .filter(pe -> isVariant(pe, refBase))
                     .mapToDouble(pe -> AlignmentUtils.getNumHardClippedBases(pe.getRead())).toArray());
 
             final double medianAltCigar = new Median().evaluate(Utils.stream(pileup)
-                    .filter(pe -> pe.getBase() != refBase)
+                    .filter(pe -> isVariant(pe, refBase))
                     .mapToDouble(pe -> pe.getRead().numCigarElements())
                     .toArray());
 
@@ -98,6 +99,13 @@ public class AnnotateVariants extends VariantWalker {
             vcfWriter.add(vc);
         }
 
+    }
+
+    private static boolean isVariant(final PileupElement pe, final byte refBase) {
+        return pe.getBase() != refBase
+                || pe.isBeforeDeletionStart() || pe.isBeforeInsertion()
+                || pe.isAfterDeletionEnd()|| pe.isAfterInsertion()
+                || pe.isDeletion();
     }
 
     @Override
