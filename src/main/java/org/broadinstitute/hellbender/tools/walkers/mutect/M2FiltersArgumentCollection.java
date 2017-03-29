@@ -41,9 +41,10 @@ public class M2FiltersArgumentCollection extends AssemblyBasedCallerArgumentColl
     @Argument(fullName = "maxEventsInHaplotype", optional = true, doc="Variants coming from a haplotype with more than this many events are filtered")
     public int maxEventsInHaplotype = 2;
 
-    @Argument(fullName = "maxEventsInHaplotype", optional = true, doc="Variants coming from a haplotype with more than this many events are filtered")
-    public int maxEventsInHaplotype = 2;
-
+    // TODO: add short names, make them constants
+    @Argument(fullName = "strand_artifact_threshold", optional = true, doc = "Filter a variant if the probability of strand artifact exceeds this number")
+    public double STRAND_ARTIFACT_POSTERIOR_PROB_THRESHOLD = 0.9;
+    
     @Argument(shortName = "contaminationTable", fullName = "contaminationTable", optional = true, doc="Table containing contamination information.")
     public File contaminationTable = null;
 

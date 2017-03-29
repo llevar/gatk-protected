@@ -1,11 +1,8 @@
 package org.broadinstitute.hellbender.tools.walkers.mutect;
 
-import com.google.common.primitives.Doubles;
 import htsjdk.variant.variantcontext.Genotype;
 import htsjdk.variant.variantcontext.VariantContext;
 import htsjdk.variant.vcf.VCFConstants;
-import org.apache.commons.math3.util.DoubleArray;
-import org.apache.commons.math3.util.MathArrays;
 import org.broadinstitute.hellbender.tools.walkers.contamination.ContaminationRecord;
 import org.broadinstitute.hellbender.utils.GATKProtectedVariantContextUtils;
 import org.broadinstitute.hellbender.utils.MathUtils;
@@ -73,7 +70,6 @@ public class Mutect2FilteringEngine {
 
     //TODO: make an annotation and filter for read position
 
-
     private static void applyPanelOfNormalsFilter(final M2FiltersArgumentCollection MTFAC, final VariantContext vc, final Collection<String> filters) {
         final boolean siteInPoN = vc.hasAttribute(SomaticGenotypingEngine.IN_PON_VCF_ATTRIBUTE);
         if (siteInPoN) {
@@ -126,26 +122,10 @@ public class Mutect2FilteringEngine {
                 vc, (SomaticGenotypingEngine.STRAND_ARTIFACT_POSTERIOR_PROBABILITIES_KEY), () -> null, -1);
         double artifactForward = posteriorProbabilities[SomaticGenotypingEngine.ARTIFACT_FWD];
         double artifactReverse = posteriorProbabilities[SomaticGenotypingEngine.ARTIFACT_REV];
-        if (artifactForward > 0.5 || artifactReverse > 0.5){
+        if (artifactForward > MTFAC.STRAND_ARTIFACT_POSTERIOR_PROB_THRESHOLD || artifactReverse > MTFAC.STRAND_ARTIFACT_POSTERIOR_PROB_THRESHOLD){
             filters.add(GATKVCFConstants.STRAND_ARTIFACT_FILTER_NAME);
         }
 
-    }
-
-    private static void applyOldStrandBiasFilterl(final M2FiltersArgumentCollection MTFAC, final VariantContext vc, final Collection<String> filters) {
-        if (MTFAC.ENABLE_STRAND_ARTIFACT_FILTER) {
-            if (vc.hasAttribute(GATKVCFConstants.TLOD_FWD_KEY) && vc.hasAttribute(GATKVCFConstants.TLOD_REV_KEY)
-                    && vc.hasAttribute(GATKVCFConstants.TUMOR_SB_POWER_FWD_KEY) && vc.hasAttribute(GATKVCFConstants.TUMOR_SB_POWER_REV_KEY)) {
-                final double forwardLod = vc.getAttributeAsDouble(GATKVCFConstants.TLOD_FWD_KEY, 0.0);
-                final double reverseLod = vc.getAttributeAsDouble(GATKVCFConstants.TLOD_REV_KEY, 0.0);
-                final double forwardPower = vc.getAttributeAsDouble(GATKVCFConstants.TUMOR_SB_POWER_FWD_KEY, 0.0);
-                final double reversePower = vc.getAttributeAsDouble(GATKVCFConstants.TUMOR_SB_POWER_REV_KEY, 0.0);
-                if ((forwardPower > MTFAC.STRAND_ARTIFACT_POWER_THRESHOLD && forwardLod < MTFAC.STRAND_ARTIFACT_LOD_THRESHOLD) ||
-                        (reversePower > MTFAC.STRAND_ARTIFACT_POWER_THRESHOLD && reverseLod < MTFAC.STRAND_ARTIFACT_LOD_THRESHOLD)) {
-                    filters.add(GATKVCFConstants.STRAND_ARTIFACT_FILTER_NAME);
-                }
-            }
-        }
     }
 
     private void applyEventDistanceFilters(final VariantContext vc, final Collection<String> filters) {
