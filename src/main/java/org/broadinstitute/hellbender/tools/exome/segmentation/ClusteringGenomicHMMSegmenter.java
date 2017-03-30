@@ -153,8 +153,8 @@ public abstract class ClusteringGenomicHMMSegmenter<DATA, HIDDEN> {
     private void pruneStatesByCount(final ExpectationStep eStep) {
         //TODO: magic constants
         final List<Integer> indicesToKeep = IntStream.range(0, numStates())
-                .filter(state -> eStep.totalCountsForState(state) > 3)
-                .filter(state -> IntStream.range(0, numPositions()).mapToDouble(p -> eStep.pStateAtPosition(state,p)).max().getAsDouble() > 0.5)
+                .filter(state -> eStep.totalCountsForState(state) > 0)
+                .filter(state -> IntStream.range(0, numPositions()).mapToDouble(p -> eStep.pStateAtPosition(state,p)).max().getAsDouble() > 0.25)
                 .boxed().collect(Collectors.toList());
         hiddenStateValues = indicesToKeep.stream().map(hiddenStateValues::get).collect(Collectors.toList());
     }
