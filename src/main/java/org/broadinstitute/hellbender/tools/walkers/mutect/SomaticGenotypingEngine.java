@@ -257,32 +257,27 @@ public class SomaticGenotypingEngine extends AssemblyBasedCallerGenotypingEngine
                                           final List<Allele> allSomaticAlleles) {
         // TODO: is it possible to use the data in the matched normal as well?
         // TODO: we must not penalize the cases near the edges of targets
-        // TODO: must find a way to access n+, x+, etc. that we currently compute from ReadLikelihoods from vcf. We probably have to store them in the vcf
-        // TODO: how should we handle multi-allelic sites?
         final Allele refAllele = allSomaticAlleles.get(0);
+        // TODO: how should we handle multi-allelic sites?
+        // for now, take the first alternate allele
         final Allele altAlelle = allSomaticAlleles.get(1);
 
         final Collection<ReadLikelihoods<Allele>.BestAllele> tumorBestAlleles = likelihoods.bestAlleles(tumorSampleName);
         final Collection<ReadLikelihoods<Allele>.BestAllele> tumorBestAllelesForward = tumorBestAlleles.stream().filter(ba -> ! ba.read.isReverseStrand() && ba.isInformative()).collect(Collectors.toList());
         final Collection<ReadLikelihoods<Allele>.BestAllele> tumorBestAllelesReverse = tumorBestAlleles.stream().filter(ba -> ba.read.isReverseStrand() && ba.isInformative()).collect(Collectors.toList());
-        final int numAltReadsForward = (int) tumorBestAllelesForward.stream().filter(ba -> ba.allele.equals(altAlelle)).count(); // TODO: getAlternateAllele fails for triallelic
-        final int numRefReadsForward = (int) tumorBestAllelesForward.stream().filter(ba -> ba.allele.equals(refAllele)).count();
-        final int numAltReadsReverse = (int) tumorBestAllelesReverse.stream().filter(ba -> ba.allele.equals(altAlelle)).count(); // TODO: getAlternateAllele fails for triallelic
-        final int numRefReadsReverse = (int) tumorBestAllelesReverse.stream().filter(ba -> ba.allele.equals(refAllele)).count();
-        final int numReadsForward = tumorBestAllelesForward.size(); // or should it be numAltReadsForward + numRefReadsForward?
-        final int numReadsReverse = tumorBestAllelesReverse.size(); // ditto
+        final int numAltReadsForward = (int) tumorBestAllelesForward.stream().filter(ba -> ba.allele.equals(altAlelle)).count();
+        final int numAltReadsReverse = (int) tumorBestAllelesReverse.stream().filter(ba -> ba.allele.equals(altAlelle)).count();
+        final int numReadsForward = tumorBestAllelesForward.size();
+        final int numReadsReverse = tumorBestAllelesReverse.size();
         final int numReads = numReadsForward + numReadsReverse;
 
-
-
         // prior probabilities for z
-        // How do we pick pi? TODO: ROC curve
+        // TODO: How do we pick pi?
         final double[] pi = new double[]{0.01, 0.01, 0.98};
 
-        // compute the posterior probabilities
-        // YOUR CODE HERE
         final double[] unnormalized_posterior_probabilities = new double[pi.length];
 
+        // note to self:
         // use the example in HeterogeneousHeterozygousPileupPriorModel.java
         // actual integration takes place in getHetLogLikelihood()
 
@@ -297,8 +292,6 @@ public class SomaticGenotypingEngine extends AssemblyBasedCallerGenotypingEngine
         final GaussIntegrator gaussIntegratorForAlleleFraction = integratorFactory.legendre(numIntegPointsForAlleleFraction, 0.0, 1.0);
         final GaussIntegrator gaussIntegratorForEpsilon = integratorFactory.legendre(numIntegPointsForEpsilon, 0.0, 1.0);
 
-
-        // TODO: lookup boxed
         final List<Double> gaussIntegrationWeightsForAlleleFraction = IntStream.range(0, numIntegPointsForAlleleFraction).mapToDouble(gaussIntegratorForAlleleFraction::getWeight).boxed().collect(Collectors.toList());
         final List<Double> gaussIntegrationAbscissasForAlleleFraction = IntStream.range(0, numIntegPointsForAlleleFraction).mapToDouble(gaussIntegratorForAlleleFraction::getPoint).boxed().collect(Collectors.toList());
         final List<Double> gaussIntegrationWeightsForEpsilon = IntStream.range(0, numIntegPointsForEpsilon).mapToDouble(gaussIntegratorForEpsilon::getWeight).boxed().collect(Collectors.toList());

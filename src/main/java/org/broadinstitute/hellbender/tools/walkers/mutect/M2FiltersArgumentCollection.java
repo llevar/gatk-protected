@@ -24,17 +24,6 @@ public class M2FiltersArgumentCollection extends AssemblyBasedCallerArgumentColl
     @Argument(fullName = "dbsnp_normal_lod", optional = true, doc = "LOD threshold for calling normal non-variant at dbsnp sites")
     public double NORMAL_DBSNP_LOD_THRESHOLD = 5.5;
 
-    @Hidden
-    @Argument(fullName = "strand_artifact_lod", optional = true, doc = "LOD threshold for calling strand bias")
-    public float STRAND_ARTIFACT_LOD_THRESHOLD = 2.0f;
-
-    @Hidden
-    @Argument(fullName = "strand_artifact_power_threshold", optional = true, doc = "power threshold for calling strand bias")
-    public float STRAND_ARTIFACT_POWER_THRESHOLD = 0.9f;
-
-    @Argument(fullName = "enable_strand_artifact_filter", optional = true, doc = "turn on strand artifact filter")
-    public boolean ENABLE_STRAND_ARTIFACT_FILTER = false;
-
     @Argument(fullName = "maxAltAllelesThreshold", optional = true, doc="filter variants with too many alt alleles")
     public int numAltAllelesThreshold = 1;
 
@@ -43,8 +32,8 @@ public class M2FiltersArgumentCollection extends AssemblyBasedCallerArgumentColl
 
     // TODO: add short names, make them constants
     @Argument(fullName = "strand_artifact_threshold", optional = true, doc = "Filter a variant if the probability of strand artifact exceeds this number")
-    public double STRAND_ARTIFACT_POSTERIOR_PROB_THRESHOLD = 0.9;
-    
+    public double STRAND_ARTIFACT_POSTERIOR_PROB_THRESHOLD = 0.95;
+
     @Argument(shortName = "contaminationTable", fullName = "contaminationTable", optional = true, doc="Table containing contamination information.")
     public File contaminationTable = null;
 
