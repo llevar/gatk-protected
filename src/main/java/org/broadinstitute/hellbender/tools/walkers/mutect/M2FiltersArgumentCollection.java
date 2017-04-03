@@ -32,7 +32,7 @@ public class M2FiltersArgumentCollection extends AssemblyBasedCallerArgumentColl
 
     // TODO: add short names, make them constants
     @Argument(fullName = "strand_artifact_threshold", optional = true, doc = "Filter a variant if the probability of strand artifact exceeds this number")
-    public double STRAND_ARTIFACT_POSTERIOR_PROB_THRESHOLD = 0.95;
+    public double STRAND_ARTIFACT_POSTERIOR_PROB_THRESHOLD = 1.0;
 
     @Argument(shortName = "contaminationTable", fullName = "contaminationTable", optional = true, doc="Table containing contamination information.")
     public File contaminationTable = null;

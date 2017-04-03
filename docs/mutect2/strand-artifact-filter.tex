@@ -22,36 +22,39 @@
 
 \section{Introduction}
 
-(Describe the strand artifact)
-Assumptions: 
-biallelic
+
+Strand artifact filter captures false positives that arise from . This model is a build 
 
 \section{The Probabilistic Model}
-\subsection{Graphical Model and Conditional Distributions}
-
-(Describe that the model applies to a single site only. Extension over multiple sites is coming.)
-
 \begin{figure}
 \centering
 \includegraphics[width=0.3\textwidth]{strand_artifact_pgm.png}
-\caption{\label{fig:frog}The probabilistic graphical model of the new strand artifact filter.}
+\caption{\label{fig:frog}The probabilistic graphical model}
 \end{figure}
 
 \begin{itemize}
-	\item $z \sim \text{Multinomial}(\pi)$, where $z  \in \{ \text{artifact on forward strand}, \text{artifact on reverse strand}, \text{no artifact} \}$, represents the presence of the strand artifact in either the forward or reverse reads. For instance, artifact on forward strand means that the artifactual evidence for the alternate allele was detected in the forward (+) reads but not in the reverse (-) reads. (REWORD)
-	\item $f \sim \text{Unif}(0, 1)$ represents the true allele fraction at the site.
-	\item $\epsilon \sim \text{Beta}(\alpha, \beta)$ represents the allele fraction of strand-specific artifact. (Not strictly true...?)
+	\item $z \sim \text{Multinomial}(\pi)$ is a latent variable, encoded as a 3-dimensional vector of the probability of strand artifact in forward reads (index 0), reverse reads (1), or neither (2). For instance, $z = [0.9, 0.03, 0.07]$ means that with probability 0.9 we believe that the \textit{forward} ref reads are misread as alt at rate $\epsilon$, and with probability 0.07 we believe that the reads are not subject to strand artifact.
+	\item $f \sim \text{Unif}(0, 1)$ is the alt allele fraction at the locus
+	\item $\epsilon \sim \text{Beta}(\alpha, \beta)$ is the probability that,  due to strand artifact, we mistakenly read an ref allele as alt
 	\item $x^+ | f, \epsilon, z \sim$ is the number of alt reads in the forward reads. It's a mixture of binomials, defined as:
-		\begin{itemize}
-			\item $x^+ | f, \epsilon, z = \text{Artifact+} \sim \text{Binomial} (n^+, f + \epsilon(1-f))$
-			\item $x^+ | f, \epsilon, z = \text{Artifact-} \sim \text{Binomial} (n^+, f)$
-			\item $x^+ | f, \epsilon, z = \text{NoArtifact} \sim \text{Binomial} (n^+, f)$
-		\end{itemize}
+	$$
+	x^+ | f, \epsilon, z \sim
+		\begin{cases}
+			\text{Binomial} (n^+, f + \epsilon(1-f)) & z = \mathrm{Art+}\\
+			 \text{Binomial} (n^+, f) 			& z = \mathrm{Art-} \\
+			 \text{Binomial} (n^+, f)			& z = \mathrm{noArt}
+		\end{cases}
+	$$
+			%\item $x^+ | f, \epsilon, z = \text{Artifact+} \sim \text{Binomial} (n^+, f + \epsilon(1-f))$
+			%\item $x^+ | f, \epsilon, z = \text{Artifact-} \sim \text{Binomial} (n^+, f)$
+			%\item $x^+ | f, \epsilon, z = \text{NoArtifact} \sim \text{Binomial} (n^+, f)$
 \end{itemize}
+
+
 
 We compute the conditional distributions of $x^-$  analogously.
 
-Having observed the read counts in the + and - directions, we can compute the posterior probabilities of the latent variable $z$, as described below.
+Having observed the read counts in the forward and reverse directions, we can compute the posterior probabilities of the latent variable $z$ as described in the next section.
 
 \subsection{Posterior Probabilities}
 
@@ -64,39 +67,19 @@ P(z |x^+, x^-) & \propto p(z) p(x^+, x^- | z) \\
 & = p(z) \iint_{f, \epsilon}  p(f) p(\epsilon) p(x^+, x^- | z, f, \epsilon) \,df\,d\epsilon \\
 & = p(z) \iint_{f, \epsilon}  p(f) p(\epsilon) p(x^+ | z, f, \epsilon) p(x^- | z, f, \epsilon) \,df\,d\epsilon \\
 & = p(z) \iint_{f, \epsilon}  p(\epsilon) p(x^+ | z, f, \epsilon) p(x^- | z, f, \epsilon) \,df\,d\epsilon \\
-& = p(z) \iint_{f, \epsilon}  Beta(\epsilon|\alpha, \beta) Binomial(x^+ | f + \epsilon(1-f), n^+) Binomial(x^- | f, n^-) \,df\,d\epsilon \\
+& = p(z) \iint_{f, \epsilon}  \mathrm{Beta}(\epsilon|\alpha, \beta) \mathrm{Binomial}(x^+ | f + \epsilon(1-f), n^+) \mathrm{Binomial}(x^- | f, n^-) \,df\,d\epsilon \\
 \end{split}
 \end{equation}
 
-The posterior probability of no artifact follows the same derivation up to the second to last step. It reduces to a single integral over $f$ because the conditional probabilities of $x^+$ and $x^-$ do not depend on $\epsilon$. We again use a shorthand $z$ for $z=no\_art$
+The posterior probability of no artifact follows the same derivation up to the second to last step. It reduces to a single integral over $f$ because the conditional probabilities of $x^+$ and $x^-$ do not depend on $\epsilon$. We again use a shorthand $z$ for $z=\mathrm{noArt}$
 
 \begin{equation}
 \begin{split}
 P(z |x^+, x^-) & \propto p(z) p(x^+, x^- | z) \\
 		    & = p(z) \iint_{f, \epsilon}  p(\epsilon) p(x^+ | z, f, \epsilon) p(x^- | z, f, \epsilon) \,df\,d\epsilon \\
 		    & = p(z) \int_{f}  p(x^+ | z, f) p(x^- | z, f) \,df \int_{\epsilon}  p(\epsilon) d\epsilon \\
-                     & = p(z) \int_{f}  Binomial(x^+ | f, n^+) Binomial(x^- | f, n^-) \,df \\
+                     & = p(z) \int_{f}  \mathrm{Binomial}(x^+ | f, n^+) \mathrm{Binomial}(x^- | f, n^-) \,df \\
 \end{split}
 \end{equation}
-
-
-Note that once we have the posterior probabilities of $z = noart$ and $z = art+$, we may simply subtract their sum from 1 to get $art-$. No simple analytical solution exists for the double integrals in (1) and thus we must integrate it numerically.
-
-\subsection{Numerical Integration}
-We use Gauss-Legendre Quadriture to compute the integral 
-
-\url{http://www2.math.umd.edu/~dlevy/classes/amsc466/lecture-notes/integration-chap.pdf}
-
-\section{Generative Model}
-
-\section{Concerns}
-What happens if we only get reads in one direction e.g. near the end of targets?
-
-
-\begin{enumerate}
-\item Draw a discrete latent variable $z$ from the prior weight $pi$. $z$ may take on three possible values. $Art+$, $Art-$
-\end{enumerate}
-
-
 
 \end{document}
