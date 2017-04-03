@@ -158,7 +158,7 @@ public class SomaticGenotypingEngine extends AssemblyBasedCallerGenotypingEngine
 
             //TODO: multiple alt alleles -- per-allele strand bias
             final List<Allele> allSomaticAlleles = ListUtils.union(Arrays.asList(mergedVC.getReference()), somaticAltAlleles);
-            addStrandBiasAnnotations(readAlleleLikelihoods, callVcb, allSomaticAlleles);
+            addStrandArtifactAnnotations(readAlleleLikelihoods, callVcb, allSomaticAlleles);
 
             if (!featureContext.getValues(MTAC.cosmicFeatureInput, loc).isEmpty()) {
                 callVcb.attribute(IN_COSMIC_VCF_ATTRIBUTE, true);
@@ -236,13 +236,12 @@ public class SomaticGenotypingEngine extends AssemblyBasedCallerGenotypingEngine
         return new VariantContextBuilder(callVcb).alleles(allSomaticAlleles).genotypes(genotypes).make();
     }
 
-    // TODO: maybe use this instead of the numbers
     // the latent variable Z in the strand artifact filter model
     public enum StrandArtifactZ {
         ART_PLUS(0), ART_MINUS(1), NO_ART(2);
 
         private int index;
-        private StrandArtifactZ(int i){
+        StrandArtifactZ(int i){
             index = i;
         }
 
@@ -252,14 +251,21 @@ public class SomaticGenotypingEngine extends AssemblyBasedCallerGenotypingEngine
 
     static final int ARTIFACT_FWD = 0, ARTIFACT_REV = 1, NO_ARTIFACT = 2; // TODO: should be an enum
 
-    private void addStrandBiasAnnotations(final ReadLikelihoods<Allele> likelihoods,
-                                          final VariantContextBuilder callVcb,
-                                          final List<Allele> allSomaticAlleles) {
+    // (* model priors *)
+    // pseudocounts for the beta distribution over epsilon
+    // alpha > 0 and beta > 0. alpha = beta = 1 gives us the flat prior.
+    final int alpha = 2;
+    final int beta = 6; // give more prior weight to beta (i.e. pseudocount for tails) so that the peak shifts towards 0
+
+    // prior probabilities for the latent variable z = {ART_PLUS, ART_MINUS, NO_ART} TODO: How do we pick pi?
+    final double[] pi = new double[]{0.01, 0.01, 0.98};
+
+    private void addStrandArtifactAnnotations(final ReadLikelihoods<Allele> likelihoods,
+                                              final VariantContextBuilder callVcb,
+                                              final List<Allele> allSomaticAlleles) {
         // TODO: is it possible to use the data in the matched normal as well?
         // TODO: we must not penalize the cases near the edges of targets
-        final Allele refAllele = allSomaticAlleles.get(0);
-        // TODO: how should we handle multi-allelic sites?
-        // for now, take the first alternate allele
+        // TODO: how should we handle multi-allelic sites? for now, take the first alternate allele
         final Allele altAlelle = allSomaticAlleles.get(1);
 
         final Collection<ReadLikelihoods<Allele>.BestAllele> tumorBestAlleles = likelihoods.bestAlleles(tumorSampleName);
@@ -271,50 +277,50 @@ public class SomaticGenotypingEngine extends AssemblyBasedCallerGenotypingEngine
         final int numReadsReverse = tumorBestAllelesReverse.size();
         final int numReads = numReadsForward + numReadsReverse;
 
-        // prior probabilities for z
-        // TODO: How do we pick pi?
-        final double[] pi = new double[]{0.01, 0.01, 0.98};
-
         final double[] unnormalized_posterior_probabilities = new double[pi.length];
 
         // note to self:
         // use the example in HeterogeneousHeterozygousPileupPriorModel.java
         // actual integration takes place in getHetLogLikelihood()
 
-        // first compute the NO_ARTIFACT case
+        // First compute the NO_ARTIFACT case, which entails evaluating an integral over the allele fraction f
+
         // the integrand is a polynomial of degree n, where n is the number of reads at the locus
         // thus to integrate exactly we need (n/2)+1 points
-
         final int numIntegPointsForAlleleFraction = numReads/2 + 1;
         final int numIntegPointsForEpsilon = (numReads + alpha + beta - 2)/2 + 1;
 
         final GaussIntegratorFactory integratorFactory = new GaussIntegratorFactory();
         final GaussIntegrator gaussIntegratorForAlleleFraction = integratorFactory.legendre(numIntegPointsForAlleleFraction, 0.0, 1.0);
-        final GaussIntegrator gaussIntegratorForEpsilon = integratorFactory.legendre(numIntegPointsForEpsilon, 0.0, 1.0);
-
-        final List<Double> gaussIntegrationWeightsForAlleleFraction = IntStream.range(0, numIntegPointsForAlleleFraction).mapToDouble(gaussIntegratorForAlleleFraction::getWeight).boxed().collect(Collectors.toList());
-        final List<Double> gaussIntegrationAbscissasForAlleleFraction = IntStream.range(0, numIntegPointsForAlleleFraction).mapToDouble(gaussIntegratorForAlleleFraction::getPoint).boxed().collect(Collectors.toList());
-        final List<Double> gaussIntegrationWeightsForEpsilon = IntStream.range(0, numIntegPointsForEpsilon).mapToDouble(gaussIntegratorForEpsilon::getWeight).boxed().collect(Collectors.toList());
-        final List<Double> gaussIntegrationAbscissasForEpsilon = IntStream.range(0, numIntegPointsForEpsilon).mapToDouble(gaussIntegratorForEpsilon::getPoint).boxed().collect(Collectors.toList());
+        final List<Double> gaussIntegrationWeightsForAlleleFraction = IntStream.range(0, numIntegPointsForAlleleFraction)
+                .mapToDouble(gaussIntegratorForAlleleFraction::getWeight).boxed().collect(Collectors.toList());
+        final List<Double> gaussIntegrationAbscissasForAlleleFraction = IntStream.range(0, numIntegPointsForAlleleFraction)
+                .mapToDouble(gaussIntegratorForAlleleFraction::getPoint).boxed().collect(Collectors.toList());
 
         final List<Double> integrandsForNoArtifact = gaussIntegrationAbscissasForAlleleFraction.stream()
-                .map(f -> getIntegrandNoArtifact(f, numReadsForward, numAltReadsReverse, numAltReadsForward, numAltReadsReverse))
+                .map(f -> getIntegrandGivenNoArtifact(f, numReadsForward, numReadsReverse, numAltReadsForward, numAltReadsReverse)) // is it better to mapToDouble, boxed, then collect?
                 .collect(Collectors.toList());
-        final double likelihoodForNoArtifact = IntStream.range(0, numIntegPointsForAlleleFraction).mapToDouble(i -> gaussIntegrationWeightsForAlleleFraction.get(i)*integrandsForNoArtifact.get(i)).sum();
-        unnormalized_posterior_probabilities[NO_ARTIFACT] = pi[NO_ARTIFACT]*likelihoodForNoArtifact;
+        final double likelihoodForNoArtifact = IntStream.range(0, numIntegPointsForAlleleFraction).
+                mapToDouble(i -> gaussIntegrationWeightsForAlleleFraction.get(i) * integrandsForNoArtifact.get(i)).sum();
+        unnormalized_posterior_probabilities[NO_ARTIFACT] = pi[NO_ARTIFACT] * likelihoodForNoArtifact;
 
-        // then compute the ARTIFACT_FWD case
-        // double integral
+        // Compute the posterior probability of ARTIFACT_FWD and ARTIFACT_REV; it's a double integral over the allele fraction f and epsilon
+        // Note we must calculate the unnormalized probabilities for NO_ART, ARTIFACT_FWD and ARTIFACT_REV in order to normalize the probabilities
+        final GaussIntegrator gaussIntegratorForEpsilon = integratorFactory.legendre(numIntegPointsForEpsilon, 0.0, 1.0);
+        final List<Double> gaussIntegrationWeightsForEpsilon = IntStream.range(0, numIntegPointsForEpsilon)
+                .mapToDouble(gaussIntegratorForEpsilon::getWeight).boxed().collect(Collectors.toList());
+        final List<Double> gaussIntegrationAbscissasForEpsilon = IntStream.range(0, numIntegPointsForEpsilon)
+                .mapToDouble(gaussIntegratorForEpsilon::getPoint).boxed().collect(Collectors.toList());
+
         // TODO: update numIntegPoints
-        // TODO: do not use for loops
         double likelihoodForArtifactFwd = 0.0;
         double likelihoodForArtifactRev = 0.0;
         for (int i = 0; i < numIntegPointsForAlleleFraction; i++) {
             for (int j = 0; j < numIntegPointsForEpsilon; j++) {
-                double f = gaussIntegrationAbscissasForAlleleFraction.get(i);
-                double epsilon = gaussIntegrationAbscissasForEpsilon.get(j);
-                double integrandArtifactFwd = getIntegrandWithArtifact(f, epsilon, numReadsForward, numReadsReverse, numAltReadsForward, numAltReadsReverse);
-                double integrandArtifactRev = getIntegrandWithArtifact(f, epsilon, numReadsReverse, numReadsForward, numAltReadsReverse, numAltReadsForward);
+                final double f = gaussIntegrationAbscissasForAlleleFraction.get(i);
+                final double epsilon = gaussIntegrationAbscissasForEpsilon.get(j);
+                final double integrandArtifactFwd = getIntegrandGivenArtifact(f, epsilon, numReadsForward, numReadsReverse, numAltReadsForward, numAltReadsReverse);
+                final double integrandArtifactRev = getIntegrandGivenArtifact(f, epsilon, numReadsReverse, numReadsForward, numAltReadsReverse, numAltReadsForward);
                 likelihoodForArtifactFwd += gaussIntegrationWeightsForAlleleFraction.get(i) * gaussIntegrationWeightsForEpsilon.get(j) * integrandArtifactFwd;
                 likelihoodForArtifactRev += gaussIntegrationWeightsForAlleleFraction.get(i) * gaussIntegrationWeightsForEpsilon.get(j) * integrandArtifactRev;
             }
@@ -328,20 +334,15 @@ public class SomaticGenotypingEngine extends AssemblyBasedCallerGenotypingEngine
         callVcb.attribute(STRAND_ARTIFACT_POSTERIOR_PROBABILITIES_KEY, posterior_probabilities);
     }
 
-    private double getIntegrandNoArtifact(final double f, final int n_plus, final int n_minus, final int x_plus, final int x_minus){
+    private double getIntegrandGivenNoArtifact(final double f, final int n_plus, final int n_minus, final int x_plus, final int x_minus){
         final BinomialDistribution binomFwd = new BinomialDistribution(n_plus, f);
         final BinomialDistribution binomRev = new BinomialDistribution(n_minus, f);
 
         return binomFwd.probability(x_plus)*binomRev.probability(x_minus);
     }
 
-    // prior pseudocounts for the beta distribution over epsilon
-    // alpha > 0 and beta > 0. alpha = beta = 1 gives us the flat prior.
-    final int alpha = 2;
-    final int beta = 6; // give more prior weight to beta (i.e. pseudocount for tails) so that the peak shifts towards 0
-    private double getIntegrandWithArtifact(final double f, final double epsilon, final int nWithArtifact, final int nNoArtifact, final int xWithArtifact, final int xNoArtifact){
-
-        final BinomialDistribution binomWithArtifact = new BinomialDistribution(nWithArtifact, f + epsilon*(1-f));
+    private double getIntegrandGivenArtifact(final double f, final double epsilon, final int nWithArtifact, final int nNoArtifact, final int xWithArtifact, final int xNoArtifact){
+        final BinomialDistribution binomWithArtifact = new BinomialDistribution(nWithArtifact, f + epsilon * (1-f));
         final BinomialDistribution binomNoArtifact = new BinomialDistribution(nNoArtifact, f);
         final BetaDistribution betaPrior = new BetaDistribution(alpha, beta);
 
@@ -360,7 +361,7 @@ public class SomaticGenotypingEngine extends AssemblyBasedCallerGenotypingEngine
                                                                      final String sampleNameForAlleleFractions,
                                                                      final String sampleNameForLikelihoods,
                                                                      final OptionalDouble givenAltAlleleFraction,
-                                                                     final Strand strand) {
+                                                                     final Strand strand) { // TODO: remove strand argument from these methods
         final Optional<PerAlleleCollection<Double>> alleleFractions = givenAltAlleleFraction.isPresent() ?
                 Optional.empty() : Optional.of(getAlleleFractions(likelihoods, sampleNameForAlleleFractions));
         final PerAlleleCollection<MutableDouble> genotypeLogLikelihoods = new PerAlleleCollection<>(PerAlleleCollection.Type.REF_AND_ALT);

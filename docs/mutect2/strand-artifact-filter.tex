@@ -55,11 +55,11 @@ Having observed the read counts in the + and - directions, we can compute the po
 
 \subsection{Posterior Probabilities}
 
-Below we derive the posterior probability of artifact forward ($z = art+$), given we observed the $x^+$ forward and $x^-$ reverse alt reads at a given locus.
+Below we derive the unnormalized posterior probability of strand artifact in forward reads ($z = art+$), given that we observed $x^+$ forward and $x^-$ reverse alt reads at a given locus. We use a shorthand $z$ to denote $z=art+$ for conciseness. 
 
 \begin{equation}
 \begin{split}
-P(z=art+ |x^+, x^-) & \propto p(z) p(x^+, x^- | z=art+) \\
+P(z |x^+, x^-) & \propto p(z) p(x^+, x^- | z) \\
 & = p(z) \iint_{f, \epsilon}  p(x^+, x^-, f, \epsilon | z) \,df\,d\epsilon \\
 & = p(z) \iint_{f, \epsilon}  p(f) p(\epsilon) p(x^+, x^- | z, f, \epsilon) \,df\,d\epsilon \\
 & = p(z) \iint_{f, \epsilon}  p(f) p(\epsilon) p(x^+ | z, f, \epsilon) p(x^- | z, f, \epsilon) \,df\,d\epsilon \\
@@ -68,11 +68,11 @@ P(z=art+ |x^+, x^-) & \propto p(z) p(x^+, x^- | z=art+) \\
 \end{split}
 \end{equation}
 
-The posterior probability of no artifact follows the same derivation up to the second to last step. Here we get more simplifications because the conditional probabilities of $x^+$ and $x^-$ do not depend on $\epsilon$:
+The posterior probability of no artifact follows the same derivation up to the second to last step. It reduces to a single integral over $f$ because the conditional probabilities of $x^+$ and $x^-$ do not depend on $\epsilon$. We again use a shorthand $z$ for $z=no\_art$
 
 \begin{equation}
 \begin{split}
-P(z=noart |x^+, x^-) & \propto p(z) p(x^+, x^- | z=noart) \\
+P(z |x^+, x^-) & \propto p(z) p(x^+, x^- | z) \\
 		    & = p(z) \iint_{f, \epsilon}  p(\epsilon) p(x^+ | z, f, \epsilon) p(x^- | z, f, \epsilon) \,df\,d\epsilon \\
 		    & = p(z) \int_{f}  p(x^+ | z, f) p(x^- | z, f) \,df \int_{\epsilon}  p(\epsilon) d\epsilon \\
                      & = p(z) \int_{f}  Binomial(x^+ | f, n^+) Binomial(x^- | f, n^-) \,df \\

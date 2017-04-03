@@ -117,15 +117,14 @@ public class Mutect2FilteringEngine {
         return GATKProtectedVariantContextUtils.getAttributeAsDoubleArray(vc, attribute, () -> null, -1);
     }
 
-    private static void applyStrandBiasFilter(final M2FiltersArgumentCollection MTFAC, final VariantContext vc, final Collection<String> filters) {
-        double[] posteriorProbabilities = GATKProtectedVariantContextUtils.getAttributeAsDoubleArray(
+    private static void applyStrandArtifactFilter(final M2FiltersArgumentCollection MTFAC, final VariantContext vc, final Collection<String> filters) {
+        final double[] posteriorProbabilities = GATKProtectedVariantContextUtils.getAttributeAsDoubleArray(
                 vc, (SomaticGenotypingEngine.STRAND_ARTIFACT_POSTERIOR_PROBABILITIES_KEY), () -> null, -1);
-        double artifactForward = posteriorProbabilities[SomaticGenotypingEngine.ARTIFACT_FWD];
-        double artifactReverse = posteriorProbabilities[SomaticGenotypingEngine.ARTIFACT_REV];
+        final double artifactForward = posteriorProbabilities[SomaticGenotypingEngine.ARTIFACT_FWD];
+        final double artifactReverse = posteriorProbabilities[SomaticGenotypingEngine.ARTIFACT_REV];
         if (artifactForward > MTFAC.STRAND_ARTIFACT_POSTERIOR_PROB_THRESHOLD || artifactReverse > MTFAC.STRAND_ARTIFACT_POSTERIOR_PROB_THRESHOLD){
             filters.add(GATKVCFConstants.STRAND_ARTIFACT_FILTER_NAME);
         }
-
     }
 
     private void applyEventDistanceFilters(final VariantContext vc, final Collection<String> filters) {
@@ -143,7 +142,7 @@ public class Mutect2FilteringEngine {
         applyPanelOfNormalsFilter(MTFAC, vc, filters);
         applyGermlineVariantFilter(MTFAC, vc, filters);
         applyArtifactInNormalFilter(MTFAC, vc, filters);
-        applyStrandBiasFilter(MTFAC, vc, filters);
+        applyStrandArtifactFilter(MTFAC, vc, filters);
         applySTRFilter(vc, filters);
         applyContaminationFilter(MTFAC, vc, filters);
 
