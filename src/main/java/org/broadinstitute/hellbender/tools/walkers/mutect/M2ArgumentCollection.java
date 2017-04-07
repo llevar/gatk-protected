@@ -80,10 +80,6 @@ public class M2ArgumentCollection extends AssemblyBasedCallerArgumentCollection 
     @Argument(fullName="power_constant_qscore", doc="Phred scale quality score constant to use in power calculations", optional = true)
     public int POWER_CONSTANT_QSCORE = 30;
 
-    @Hidden
-    @Argument(fullName = "strand_artifact_lod", optional = true, doc = "LOD threshold for calling strand bias")
-    public float STRAND_ARTIFACT_LOD_THRESHOLD = 2.0f;
-
     /**
      * Reads with mapping qualities below this threshold will be filtered out
      */
