@@ -32,13 +32,16 @@ import java.util.stream.IntStream;
 
 import org.broadinstitute.hellbender.utils.MathUtils;
 
+import static org.broadinstitute.hellbender.utils.OptimizationUtils.argmax;
+
 public class SomaticGenotypingEngine extends AssemblyBasedCallerGenotypingEngine {
 
     public static final String IN_COSMIC_VCF_ATTRIBUTE = "IN_COSMIC";
     public static final String IN_DBSNP_VCF_ATTRIBUTE = "IN_DBSNP";
     public static final String IN_PON_VCF_ATTRIBUTE = "IN_PON";
     public static final String NORMAL_ARTIFACT_LOD_ATTRIBUTE = "N_ART_LOD";
-    public static final String STRAND_ARTIFACT_POSTERIOR_PROBABILITIES_KEY = "STRAND_ART_POST_PROB";
+    public static final String STRAND_ARTIFACT_POSTERIOR_PROBABILITIES_KEY = "SA_POST_PROB";
+    public static final String STRAND_ARTIFACT_MAP_ALLELE_FRACTIONS_KEY = "SA_MAP_AF";
 
     private final M2ArgumentCollection MTAC;
 
@@ -258,21 +261,22 @@ public class SomaticGenotypingEngine extends AssemblyBasedCallerGenotypingEngine
         final Allele altAlelle = allSomaticAlleles.get(1);
 
         final Collection<ReadLikelihoods<Allele>.BestAllele> tumorBestAlleles = likelihoods.bestAlleles(tumorSampleName);
-        final int numAltReadsForward = (int) tumorBestAlleles.stream().filter(ba -> ! ba.read.isReverseStrand() && ba.isInformative() && ba.allele.equals(altAlelle)).count();
+        final int numAltReadsForward = (int) tumorBestAlleles.stream().filter(ba -> !ba.read.isReverseStrand() && ba.isInformative() && ba.allele.equals(altAlelle)).count();
         final int numAltReadsReverse = (int) tumorBestAlleles.stream().filter(ba -> ba.read.isReverseStrand() && ba.isInformative() && ba.allele.equals(altAlelle)).count();
-        final int numReadsForward = (int) tumorBestAlleles.stream().filter(ba -> ! ba.read.isReverseStrand() && ba.isInformative()).count();
+        final int numReadsForward = (int) tumorBestAlleles.stream().filter(ba -> !ba.read.isReverseStrand() && ba.isInformative()).count();
         final int numReadsReverse = (int) tumorBestAlleles.stream().filter(ba -> ba.read.isReverseStrand() && ba.isInformative()).count();
         final int numReads = numReadsForward + numReadsReverse;
 
         final double[] unnormalized_posterior_probabilities = new double[StrandArtifactZ.values().length];
+        final double[] maximum_a_posteriori_allele_fraction_estimates = new double[StrandArtifactZ.values().length];
 
         // Compute the posterior probability of ARTIFACT_FWD and ARTIFACT_REV; it's a double integral over the allele fraction f and epsilon
         // Note we must calculate the unnormalized probabilities for NO_ART, ARTIFACT_FWD and ARTIFACT_REV in order to get the normalized probabilities
 
         // the integrand is a polynomial of degree n, where n is the number of reads at the locus
         // thus to integrate exactly we need (n/2)+1 points
-        final int numIntegPointsForAlleleFraction = numReads/2 + 1;
-        final int numIntegPointsForEpsilon = (numReads + alpha + beta - 2)/2 + 1;
+        final int numIntegPointsForAlleleFraction = numReads / 2 + 1;
+        final int numIntegPointsForEpsilon = (numReads + alpha + beta - 2) / 2 + 1;
 
         final GaussIntegratorFactory integratorFactory = new GaussIntegratorFactory();
 
@@ -290,30 +294,50 @@ public class SomaticGenotypingEngine extends AssemblyBasedCallerGenotypingEngine
 
         double likelihoodForArtifactFwd = 0.0;
         double likelihoodForArtifactRev = 0.0;
+        double[] forwardLikelihoodsOfAlleleFractions = new double[numIntegPointsForAlleleFraction];
+        double[] reverseLikelihoodsOfAlleleFractions = new double[numIntegPointsForAlleleFraction];
+
+
         for (int i = 0; i < numIntegPointsForAlleleFraction; i++) {
+            final double f = gaussIntegrationAbscissasForAlleleFraction.get(i);
             for (int j = 0; j < numIntegPointsForEpsilon; j++) {
-                final double f = gaussIntegrationAbscissasForAlleleFraction.get(i);
                 final double epsilon = gaussIntegrationAbscissasForEpsilon.get(j);
                 final double integrandArtifactFwd = getIntegrandGivenArtifact(f, epsilon, numReadsForward, numReadsReverse, numAltReadsForward, numAltReadsReverse);
                 final double integrandArtifactRev = getIntegrandGivenArtifact(f, epsilon, numReadsReverse, numReadsForward, numAltReadsReverse, numAltReadsForward);
                 likelihoodForArtifactFwd += gaussIntegrationWeightsForAlleleFraction.get(i) * gaussIntegrationWeightsForEpsilon.get(j) * integrandArtifactFwd;
                 likelihoodForArtifactRev += gaussIntegrationWeightsForAlleleFraction.get(i) * gaussIntegrationWeightsForEpsilon.get(j) * integrandArtifactRev;
+
+                // for a fixed f, integrate over epsilons. this gives us the likelihood p(x^+, x^- | f, z) for a fixed f, which is proportional to
+                // the posterior probability of p(f | x^+, x^-, z)
+                forwardLikelihoodsOfAlleleFractions[i] += gaussIntegrationWeightsForEpsilon.get(j) * integrandArtifactFwd;
+                reverseLikelihoodsOfAlleleFractions[i] += gaussIntegrationWeightsForEpsilon.get(j) * integrandArtifactRev;
             }
         }
 
         unnormalized_posterior_probabilities[StrandArtifactZ.ART_FWD.ordinal()] = pi[StrandArtifactZ.ART_FWD.ordinal()] * likelihoodForArtifactFwd;
         unnormalized_posterior_probabilities[StrandArtifactZ.ART_REV.ordinal()] = pi[StrandArtifactZ.ART_REV.ordinal()] * likelihoodForArtifactRev;
 
+        maximum_a_posteriori_allele_fraction_estimates[StrandArtifactZ.ART_FWD.ordinal()] = MathUtils.arrayMax(forwardLikelihoodsOfAlleleFractions);
+        maximum_a_posteriori_allele_fraction_estimates[StrandArtifactZ.ART_REV.ordinal()] = MathUtils.arrayMax(reverseLikelihoodsOfAlleleFractions);
+
         // Compute the posterior probability of NO_ARTIFACT; evaluate a single integral over the allele fraction
+        // TODO: write a dot product function and add to MathUtils
         final List<Double> integrandsForNoArtifact = gaussIntegrationAbscissasForAlleleFraction.stream()
                 .map(f -> getIntegrandGivenNoArtifact(f, numReadsForward, numReadsReverse, numAltReadsForward, numAltReadsReverse))
                 .collect(Collectors.toList());
         final double likelihoodForNoArtifact = IntStream.range(0, numIntegPointsForAlleleFraction).
                 mapToDouble(i -> gaussIntegrationWeightsForAlleleFraction.get(i) * integrandsForNoArtifact.get(i)).sum();
+
         unnormalized_posterior_probabilities[StrandArtifactZ.NO_ARTIFACT.ordinal()] = pi[StrandArtifactZ.NO_ARTIFACT.ordinal()] * likelihoodForNoArtifact;
+        // if z = NO_ARTIFACT, MAP estimate for f is the sample alt allele fraction
+        maximum_a_posteriori_allele_fraction_estimates[StrandArtifactZ.NO_ARTIFACT.ordinal()] = -1.0; // TODO: get the allele fraction from the variant context
 
         final double[] posterior_probabilities = MathUtils.normalizeFromRealSpace(unnormalized_posterior_probabilities);
         callVcb.attribute(STRAND_ARTIFACT_POSTERIOR_PROBABILITIES_KEY, posterior_probabilities);
+        callVcb.attribute(STRAND_ARTIFACT_MAP_ALLELE_FRACTIONS_KEY, maximum_a_posteriori_allele_fraction_estimates);
+
+
+
     }
 
     private double getIntegrandGivenNoArtifact(final double f, final int n_plus, final int n_minus, final int x_plus, final int x_minus){

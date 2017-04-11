@@ -120,9 +120,17 @@ public class Mutect2FilteringEngine {
     private static void applyStrandArtifactFilter(final M2FiltersArgumentCollection MTFAC, final VariantContext vc, final Collection<String> filters) {
         final double[] posteriorProbabilities = GATKProtectedVariantContextUtils.getAttributeAsDoubleArray(
                 vc, (SomaticGenotypingEngine.STRAND_ARTIFACT_POSTERIOR_PROBABILITIES_KEY), () -> null, -1);
-        final double artifactForward = posteriorProbabilities[StrandArtifactZ.ART_FWD.ordinal()];
-        final double artifactReverse = posteriorProbabilities[StrandArtifactZ.ART_REV.ordinal()];
-        if (artifactForward > MTFAC.STRAND_ARTIFACT_POSTERIOR_PROB_THRESHOLD || artifactReverse > MTFAC.STRAND_ARTIFACT_POSTERIOR_PROB_THRESHOLD){
+        final double[] map_allele_fraction_estimates = GATKProtectedVariantContextUtils.getAttributeAsDoubleArray(
+                vc, (SomaticGenotypingEngine.STRAND_ARTIFACT_MAP_ALLELE_FRACTIONS_KEY), () -> null, -1);
+
+        final int maxZIndex = MathUtils.maxElementIndex(posteriorProbabilities);
+
+        if (maxZIndex == StrandArtifactZ.NO_ARTIFACT.ordinal()){
+            return;
+        }
+
+        if (posteriorProbabilities[maxZIndex] > MTFAC.STRAND_ARTIFACT_POSTERIOR_PROB_THRESHOLD &&
+                map_allele_fraction_estimates[maxZIndex] < MTFAC.STRAND_ARTIFACT_ALLELE_FRACTION_THRESHOLD){
             filters.add(GATKVCFConstants.STRAND_ARTIFACT_FILTER_NAME);
         }
     }

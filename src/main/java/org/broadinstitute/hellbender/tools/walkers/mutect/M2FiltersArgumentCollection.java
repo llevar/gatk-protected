@@ -31,8 +31,11 @@ public class M2FiltersArgumentCollection extends AssemblyBasedCallerArgumentColl
     public int maxEventsInHaplotype = 2;
 
     // TODO: add short names, make them constants
-    @Argument(fullName = "strand_artifact_threshold", optional = true, doc = "Filter a variant if the probability of strand artifact exceeds this number")
+    @Argument(shortName = "sa_prob", fullName = "strand_artifact_prob_threshold", optional = true, doc = "Filter a variant if the probability of strand artifact exceeds this number")
     public double STRAND_ARTIFACT_POSTERIOR_PROB_THRESHOLD = 1.0;
+
+    @Argument(shortName = "sa_af", fullName = "strand_artifact_af_threshold", optional = true, doc = "Only filter a variant if the MAP estimate of allele fraction given artifact is below this number")
+    public double STRAND_ARTIFACT_ALLELE_FRACTION_THRESHOLD = 0.05;
 
     @Argument(shortName = "contaminationTable", fullName = "contaminationTable", optional = true, doc="Table containing contamination information.")
     public File contaminationTable = null;

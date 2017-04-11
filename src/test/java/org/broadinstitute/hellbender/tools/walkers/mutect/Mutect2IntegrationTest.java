@@ -231,9 +231,9 @@ public class Mutect2IntegrationTest extends CommandLineProgramTest {
         return String.format("%s:%d-%d %s", variant.getContig(), variant.getStart(), variant.getEnd(), variant.getAlleles());
     }
 
-    @Test(dataProvider = "dreamSyntheticData")
     public void testStrandArtifactFilter(){
         // TODO: write a test using CRSP nn and CRSP sensitivity
+        Assert.assertTrue(true);
     }
 
 
