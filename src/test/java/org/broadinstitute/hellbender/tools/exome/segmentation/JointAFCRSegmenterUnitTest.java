@@ -23,7 +23,7 @@ import java.util.stream.IntStream;
  */
 public final class JointAFCRSegmenterUnitTest {
 
-    @Test
+    @Test(enabled=false)
     public void testSegmentation() {
         final RandomGenerator rng = RandomGeneratorFactory.createRandomGenerator(new Random(563));
         final double hetProportion = 0.25; // probability that a datum is a het i.e. #hets / (#hets + #targets)
