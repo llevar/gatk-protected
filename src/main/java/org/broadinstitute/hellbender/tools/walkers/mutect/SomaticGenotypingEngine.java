@@ -135,11 +135,11 @@ public class SomaticGenotypingEngine extends AssemblyBasedCallerGenotypingEngine
                 filterOverlappingReads(readAlleleLikelihoods, matchedNormalSampleName, mergedVC.getReference(), loc, true);
             }
 
-            final PerAlleleCollection<Double> tumorLods = getHetGenotypeLogOdds(readAlleleLikelihoods, false, Strand.BOTH, tumorSampleName);
+            final PerAlleleCollection<Double> tumorLods = getHetGenotypeLogOdds(readAlleleLikelihoods, false, tumorSampleName);
             final Optional<PerAlleleCollection<Double>> normalLods = !hasNormal ? Optional.empty() :
-                    Optional.of(getHetGenotypeLogOdds(readAlleleLikelihoods, true, Strand.BOTH, matchedNormalSampleName));
+                    Optional.of(getHetGenotypeLogOdds(readAlleleLikelihoods, true, matchedNormalSampleName));
             final Optional<PerAlleleCollection<Double>> normalArtifactLods = !hasNormal ? Optional.empty() :
-                    Optional.of(getHetGenotypeLogOdds(readAlleleLikelihoods, false, Strand.BOTH, matchedNormalSampleName));
+                    Optional.of(getHetGenotypeLogOdds(readAlleleLikelihoods, false, matchedNormalSampleName));
 
             final List<Allele> somaticAltAlleles = mergedVC.getAlternateAlleles().stream()
                     .filter(allele -> tumorLods.getAlt(allele) > MTAC.TUMOR_LOD_THRESHOLD)
@@ -198,10 +198,10 @@ public class SomaticGenotypingEngine extends AssemblyBasedCallerGenotypingEngine
     // compute the likelihoods of: AA, AB, AC. . . where A is ref and B, C. . . are somatic alts
     private PerAlleleCollection<Double> getHetGenotypeLogOdds(ReadLikelihoods<Allele> likelihoods,
                                                               final boolean isGermline,
-                                                              final Strand strand, final String sample) {
+                                                              final String sample) {
         final OptionalDouble givenAltAlleleFraction = isGermline ? GERMLINE_HET_ALT_FRACTION : NO_FIXED_TUMOR_ALT_FRACTION;
         final String sampleForAlleleFractions = (sample.equals(matchedNormalSampleName) && isGermline) ? matchedNormalSampleName : tumorSampleName;
-        final PerAlleleCollection<Double> hetGenotypeLogLks = getHetGenotypeLogLikelihoods(likelihoods, sampleForAlleleFractions, sample, givenAltAlleleFraction, strand);
+        final PerAlleleCollection<Double> hetGenotypeLogLks = getHetGenotypeLogLikelihoods(likelihoods, sampleForAlleleFractions, sample, givenAltAlleleFraction);
         final PerAlleleCollection<Double> lods = new PerAlleleCollection<>(PerAlleleCollection.Type.ALT_ONLY);
         final int flipLodFactor = isGermline ? -1 : 1;
         final List<Allele> altAlleles = likelihoods.alleles().stream().filter(Allele::isNonReference).collect(Collectors.toList());
@@ -366,8 +366,7 @@ public class SomaticGenotypingEngine extends AssemblyBasedCallerGenotypingEngine
     private PerAlleleCollection<Double> getHetGenotypeLogLikelihoods(final ReadLikelihoods<Allele> likelihoods,
                                                                      final String sampleNameForAlleleFractions,
                                                                      final String sampleNameForLikelihoods,
-                                                                     final OptionalDouble givenAltAlleleFraction,
-                                                                     final Strand strand) { // TODO: remove strand argument from these methods
+                                                                     final OptionalDouble givenAltAlleleFraction) {
         final Optional<PerAlleleCollection<Double>> alleleFractions = givenAltAlleleFraction.isPresent() ?
                 Optional.empty() : Optional.of(getAlleleFractions(likelihoods, sampleNameForAlleleFractions));
         final PerAlleleCollection<MutableDouble> genotypeLogLikelihoods = new PerAlleleCollection<>(PerAlleleCollection.Type.REF_AND_ALT);
@@ -390,7 +389,7 @@ public class SomaticGenotypingEngine extends AssemblyBasedCallerGenotypingEngine
             for (int readIndex = 0; readIndex < numReads; readIndex++) {
                 final GATKRead read = matrix.getRead(readIndex);
                 //TODO: do we need to check for MQ = 0? Haven't such reads already been filtered?
-                if (readComesFromStrand(read, strand) && read.getMappingQuality() != 0) {
+                if (read.getMappingQuality() != 0) {
                     final double readRefLogLikelihood = matrix.get(refAlleleIndex, readIndex);
                     final double readAltLogLikelihood = matrix.get(alleleIndex, readIndex);
                     genotypeLogLikelihoods.get(altAllele).add(hetLog10Likelihood(readRefLogLikelihood, readAltLogLikelihood, altAlleleFraction));
@@ -400,7 +399,6 @@ public class SomaticGenotypingEngine extends AssemblyBasedCallerGenotypingEngine
 
         final PerAlleleCollection<Double> result = new PerAlleleCollection<>(PerAlleleCollection.Type.REF_AND_ALT);
         final double refLogLikelihood = IntStream.range(0, numReads)
-                .filter(i -> readComesFromStrand(matrix.getRead(i), strand))
                 .mapToDouble(i -> matrix.get(refAlleleIndex, i))
                 .sum();
         result.setRef(refAllele, refLogLikelihood);
@@ -483,14 +481,6 @@ public class SomaticGenotypingEngine extends AssemblyBasedCallerGenotypingEngine
         }
 
         likelihoods.removeSampleReads(likelihoods.indexOfSample(sample), readsToDiscard, likelihoods.numberOfAlleles());
-    }
-
-    private enum Strand {
-        FORWARD, REVERSE, BOTH;
-    }
-
-    private static boolean readComesFromStrand(final GATKRead read, final Strand strand) {
-        return strand == Strand.BOTH || (read.isReverseStrand() ? strand == Strand.REVERSE : strand == Strand.FORWARD);
     }
 
 }
