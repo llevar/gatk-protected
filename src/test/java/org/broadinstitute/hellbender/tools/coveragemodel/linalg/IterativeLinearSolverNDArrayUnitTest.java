@@ -33,16 +33,16 @@ public class IterativeLinearSolverNDArrayUnitTest extends BaseTest {
         solver = new IterativeLinearSolverNDArray(linop, b, null, DEFAULT_ABS_TOL, DEFAULT_REL_TOL, DEFAULT_MAX_ITERS,
                 x -> x.normmaxNumber().doubleValue(), (x, y) -> x.mul(y).sumNumber().doubleValue(), true);
         sig = solver.cg(x0);
-        Assert.assertTrue(sig.getObject("status") == IterativeLinearSolverNDArray.ExitStatus.SUCCESS_ABS_TOL ||
-                sig.getObject("status") == IterativeLinearSolverNDArray.ExitStatus.SUCCESS_REL_TOL);
-        Assert.assertArrayEquals(sig.getINDArray("x").data().asDouble(), xExpected.data().asDouble(), DEFAULT_ABS_TOL);
+        Assert.assertTrue(sig.get("status") == IterativeLinearSolverNDArray.ExitStatus.SUCCESS_ABS_TOL ||
+                sig.get("status") == IterativeLinearSolverNDArray.ExitStatus.SUCCESS_REL_TOL);
+        Assert.assertArrayEquals(sig.<INDArray>get("x").data().asDouble(), xExpected.data().asDouble(), DEFAULT_ABS_TOL);
 
         /* with preconditioning */
         solver = new IterativeLinearSolverNDArray(linop, b, precond, DEFAULT_ABS_TOL, DEFAULT_REL_TOL, DEFAULT_MAX_ITERS,
                 x -> x.normmaxNumber().doubleValue(), (x, y) -> x.mul(y).sumNumber().doubleValue(), true);
         sig = solver.cg(x0);
-        Assert.assertTrue(sig.getObject("status") == IterativeLinearSolverNDArray.ExitStatus.SUCCESS_ABS_TOL ||
-                sig.getObject("status") == IterativeLinearSolverNDArray.ExitStatus.SUCCESS_REL_TOL);
-        Assert.assertArrayEquals(sig.getINDArray("x").data().asDouble(), xExpected.data().asDouble(), DEFAULT_ABS_TOL);
+        Assert.assertTrue(sig.get("status") == IterativeLinearSolverNDArray.ExitStatus.SUCCESS_ABS_TOL ||
+                sig.get("status") == IterativeLinearSolverNDArray.ExitStatus.SUCCESS_REL_TOL);
+        Assert.assertArrayEquals(sig.<INDArray>get("x").data().asDouble(), xExpected.data().asDouble(), DEFAULT_ABS_TOL);
     }
 }

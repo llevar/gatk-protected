@@ -36,8 +36,8 @@ public final class CoverageModelWPreconditionerSpark extends GeneralLinearOperat
 
     /* sparky stuff */
     private final JavaSparkContext ctx;
-    private final List<LinearSpaceBlock> fourierSpaceBlocks;
-    private final JavaPairRDD<LinearSpaceBlock, INDArray> linOpPairRDD;
+    private final List<LinearlySpacedIndexBlock> fourierSpaceBlocks;
+    private final JavaPairRDD<LinearlySpacedIndexBlock, INDArray> linOpPairRDD;
 
     public CoverageModelWPreconditionerSpark(@Nonnull final INDArray Q_ll,
                                              @Nonnull final INDArray Z_ll,
@@ -89,9 +89,9 @@ public final class CoverageModelWPreconditionerSpark extends GeneralLinearOperat
 
         /* apply the preconditioner in the Fourier space */
         long startTimePrecond = System.nanoTime();
-        final Map<LinearSpaceBlock, INDArray> W_kl_map = CoverageModelSparkUtils.partitionINDArrayToAMap(fourierSpaceBlocks, W_kl);
-        final Broadcast<Map<LinearSpaceBlock, INDArray>> W_kl_bc = ctx.broadcast(W_kl_map);
-        final JavaPairRDD<LinearSpaceBlock, INDArray> preconditionedWRDD = linOpPairRDD
+        final Map<LinearlySpacedIndexBlock, INDArray> W_kl_map = CoverageModelSparkUtils.partitionINDArrayToAMap(fourierSpaceBlocks, W_kl);
+        final Broadcast<Map<LinearlySpacedIndexBlock, INDArray>> W_kl_bc = ctx.broadcast(W_kl_map);
+        final JavaPairRDD<LinearlySpacedIndexBlock, INDArray> preconditionedWRDD = linOpPairRDD
                 .mapToPair(p -> {
                     final INDArray W_kl_chuck = W_kl_bc.value().get(p._1);
                     final INDArray linOp_chunk = p._2;
@@ -104,7 +104,7 @@ public final class CoverageModelWPreconditionerSpark extends GeneralLinearOperat
                 });
         W_kl.assign(CoverageModelSparkUtils.assembleINDArrayBlocksFromRDD(preconditionedWRDD, 0));
         W_kl_bc.destroy();
-//        final JavaPairRDD<LinearSpaceBlock, INDArray> W_kl_RDD = CoverageModelSparkUtils.rddFromINDArray(W_kl,
+//        final JavaPairRDD<LinearlySpacedIndexBlock, INDArray> W_kl_RDD = CoverageModelSparkUtils.rddFromINDArray(W_kl,
 //                fourierSpaceBlocks, ctx, true);
 //        W_kl.assign(CoverageModelSparkUtils.assembleINDArrayBlocks(linOpPairRDD.join((W_kl_RDD))
 //                .mapValues(p -> {

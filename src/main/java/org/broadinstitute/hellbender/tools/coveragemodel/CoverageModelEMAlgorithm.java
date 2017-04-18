@@ -92,7 +92,7 @@ public final class CoverageModelEMAlgorithm<STATE extends AlleleMetadataProducer
                             @Nonnull EMAlgorithmIterationInfo iterInfo) {
         final SubroutineSignal sig = routine.get();
         final String misc = miscFactory.apply(sig);
-        iterInfo.errorNorm = sig.getDouble("error_norm");
+        iterInfo.errorNorm = sig.<Double>get("error_norm");
         iterInfo.logLikelihood = getLogLikelihood();
         finalizeIteration();
         showIterationInfo(iterInfo.iter, title, iterInfo.logLikelihood, iterInfo.errorNorm, misc);
@@ -162,7 +162,7 @@ public final class CoverageModelEMAlgorithm<STATE extends AlleleMetadataProducer
 
                 if (params.gammaUpdateEnabled()) {
                     runRoutine(this::updateSampleUnexplainedVariance,
-                            s -> "iters: " + s.getInteger("iterations"), "E_STEP_GAMMA", iterInfo);
+                            s -> "iters: " + s.<Integer>get("iterations"), "E_STEP_GAMMA", iterInfo);
                     posteriorErrorNormSampleUnexplainedVariance = iterInfo.errorNorm;
                 } else {
                     posteriorErrorNormSampleUnexplainedVariance = 0;
@@ -211,7 +211,7 @@ public final class CoverageModelEMAlgorithm<STATE extends AlleleMetadataProducer
                     errorNormMeanTargetBias = iterInfo.errorNorm;
 
                     if (params.psiUpdateEnabled()) {
-                        runRoutine(this::updateTargetUnexplainedVariance, s -> "iters: " + s.getInteger("iterations"),
+                        runRoutine(this::updateTargetUnexplainedVariance, s -> "iters: " + s.<Integer>get("iterations"),
                                 "M_STEP_PSI", iterInfo);
                         errorNormUnexplainedVariance = iterInfo.errorNorm;
                     } else {
@@ -291,7 +291,7 @@ public final class CoverageModelEMAlgorithm<STATE extends AlleleMetadataProducer
                 final String posteriorOutputAbsolutePath = new File(params.getRunCheckpointingPath(),
                         String.format("%s_iter_%d", CoverageModelGlobalConstants.POSTERIOR_CHECKPOINT_PATH_PREFIX, iterInfo.iter)).getAbsolutePath();
                 saveModel(modelOutputAbsolutePath);
-                savePosteriors(posteriorOutputAbsolutePath, PosteriorVerbosityLevel.BASIC);
+                savePosteriors(posteriorOutputAbsolutePath, CoverageModelEMWorkspace.PosteriorVerbosityLevel.BASIC);
             }
         }
 
@@ -340,7 +340,7 @@ public final class CoverageModelEMAlgorithm<STATE extends AlleleMetadataProducer
 
             if (params.gammaUpdateEnabled()) {
                 runRoutine(this::updateSampleUnexplainedVariance,
-                        s -> "iters: " + s.getInteger("iterations"), "E_STEP_GAMMA", iterInfo);
+                        s -> "iters: " + s.<Integer>get("iterations"), "E_STEP_GAMMA", iterInfo);
                 posteriorErrorNormSampleUnexplainedVariance = iterInfo.errorNorm;
             } else {
                 posteriorErrorNormSampleUnexplainedVariance = 0;
@@ -385,7 +385,7 @@ public final class CoverageModelEMAlgorithm<STATE extends AlleleMetadataProducer
                 final String posteriorOutputAbsolutePath = new File(params.getRunCheckpointingPath(),
                         String.format("%s_iter_%d", CoverageModelGlobalConstants.POSTERIOR_CHECKPOINT_PATH_PREFIX, iterInfo.iter)).getAbsolutePath();
                 /* the following will automatically create the directory if it doesn't exist */
-                savePosteriors(posteriorOutputAbsolutePath, PosteriorVerbosityLevel.BASIC);
+                savePosteriors(posteriorOutputAbsolutePath, CoverageModelEMWorkspace.PosteriorVerbosityLevel.BASIC);
             }
         }
 
@@ -496,7 +496,7 @@ public final class CoverageModelEMAlgorithm<STATE extends AlleleMetadataProducer
      * @param posteriorOutputPath where to save
      * @param verbosity the verbosity level
      */
-    public void savePosteriors(final String posteriorOutputPath, final PosteriorVerbosityLevel verbosity) {
+    public void savePosteriors(final String posteriorOutputPath, final CoverageModelEMWorkspace.PosteriorVerbosityLevel verbosity) {
         workspace.savePosteriors(posteriorOutputPath, verbosity);
     }
 

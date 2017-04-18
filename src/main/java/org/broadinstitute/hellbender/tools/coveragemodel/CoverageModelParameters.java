@@ -124,22 +124,22 @@ public final class CoverageModelParameters implements Serializable {
 
     public INDArray getBiasCovariateARDCoefficients() { return biasCovariateARDCoefficients; }
 
-    public INDArray getTargetMeanBiasOnTargetBlock(@Nonnull final LinearSpaceBlock tb) {
+    public INDArray getTargetMeanBiasOnTargetBlock(@Nonnull final LinearlySpacedIndexBlock tb) {
         checkTargetBlock(tb);
         return targetMeanLogBias.get(NDArrayIndex.all(), NDArrayIndex.interval(tb.getBegIndex(), tb.getEndIndex()));
     }
 
-    private void checkTargetBlock(@Nonnull LinearSpaceBlock tb) {
+    private void checkTargetBlock(@Nonnull LinearlySpacedIndexBlock tb) {
         ParamUtils.inRange(tb.getBegIndex(), 0, numTargets, "The begin index of target block is out of range");
         ParamUtils.inRange(tb.getEndIndex(), 0, numTargets, "The begin index of target block is out of range");
     }
 
-    public INDArray getTargetUnexplainedVarianceOnTargetBlock(@Nonnull final LinearSpaceBlock tb) {
+    public INDArray getTargetUnexplainedVarianceOnTargetBlock(@Nonnull final LinearlySpacedIndexBlock tb) {
         checkTargetBlock(tb);
         return targetUnexplainedVariance.get(NDArrayIndex.all(), NDArrayIndex.interval(tb.getBegIndex(), tb.getEndIndex()));
     }
 
-    public INDArray getMeanBiasCovariatesOnTargetBlock(@Nonnull final LinearSpaceBlock tb) {
+    public INDArray getMeanBiasCovariatesOnTargetBlock(@Nonnull final LinearlySpacedIndexBlock tb) {
         checkTargetBlock(tb);
         Utils.validateArg(biasCovariatesEnabled, "Bias covariates are disabled");
         return meanBiasCovariates.get(NDArrayIndex.interval(tb.getBegIndex(), tb.getEndIndex()),

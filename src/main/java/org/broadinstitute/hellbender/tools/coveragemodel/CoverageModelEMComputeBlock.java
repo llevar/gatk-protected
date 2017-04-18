@@ -89,7 +89,7 @@ public final class CoverageModelEMComputeBlock {
     /**
      * The index range of targets included in this compute block
      */
-    private final LinearSpaceBlock targetBlock;
+    private final LinearlySpacedIndexBlock targetBlock;
 
     private final int numSamples, numLatents, numTargets;
 
@@ -458,7 +458,7 @@ public final class CoverageModelEMComputeBlock {
      * @param ardEnabled enable/disable ARD for bias covariates
      * @param icg an instance of {@link ImmutableComputableGraph}
      */
-    private CoverageModelEMComputeBlock(@Nonnull final LinearSpaceBlock targetBlock,
+    private CoverageModelEMComputeBlock(@Nonnull final LinearlySpacedIndexBlock targetBlock,
                                         final int numSamples, final int numLatents,
                                         final boolean ardEnabled,
                                         @Nonnull final ImmutableComputableGraph icg,
@@ -470,7 +470,7 @@ public final class CoverageModelEMComputeBlock {
         this.ardEnabled = ardEnabled;
         this.biasCovariatesEnabled = numLatents > 0;
         this.latestMStepSignal = latestMStepSignal;
-        this.numTargets = targetBlock.getNumTargets();
+        this.numTargets = targetBlock.getNumElements();
     }
 
     /**
@@ -481,7 +481,7 @@ public final class CoverageModelEMComputeBlock {
      * @param numLatents dimension of the bias latent space
      * @param ardEnabled enable/disable ARD for bias covariates
      */
-    public CoverageModelEMComputeBlock(@Nonnull final LinearSpaceBlock targetBlock,
+    public CoverageModelEMComputeBlock(@Nonnull final LinearlySpacedIndexBlock targetBlock,
                                        final int numSamples, final int numLatents,
                                        final boolean ardEnabled) {
         this(targetBlock, numSamples, numLatents, ardEnabled,
@@ -489,7 +489,7 @@ public final class CoverageModelEMComputeBlock {
                 SubroutineSignal.builder().build());
     }
 
-    public LinearSpaceBlock getTargetSpaceBlock() {
+    public LinearlySpacedIndexBlock getTargetSpaceBlock() {
         return targetBlock;
     }
 
@@ -686,7 +686,7 @@ public final class CoverageModelEMComputeBlock {
                     final double[] currentSampleReadCountArray = n_st.getRow(si).dup().data().asDouble();
                     final double[] currentSampleMuArray = mu_st.getRow(si).dup().data().asDouble();
                     final double[] currentSampleMappingErrorArray = err_st.getRow(si).dup().data().asDouble();
-                    return IntStream.range(0, targetBlock.getNumTargets())
+                    return IntStream.range(0, targetBlock.getNumElements())
                             .mapToObj(ti -> new CoverageModelCopyRatioEmissionData(
                                     currentSampleMuArray[ti], /* log bias */
                                     psiArray[ti] + gammaArray[si], /* total unexplained variance */
@@ -873,7 +873,7 @@ public final class CoverageModelEMComputeBlock {
      */
     public CoverageModelEMComputeBlock cloneWithInitializedData(@Nonnull final InitialDataBlock initialDataBlock) {
         Utils.nonNull(initialDataBlock, "The initial data block must be non-null");
-        initialDataBlock.assertDataBlockSize(targetBlock.getNumTargets(), numSamples);
+        initialDataBlock.assertDataBlockSize(targetBlock.getNumElements(), numSamples);
 
         /* create NDArrays from the data blocks */
         final INDArray readCounts = Nd4j.create(

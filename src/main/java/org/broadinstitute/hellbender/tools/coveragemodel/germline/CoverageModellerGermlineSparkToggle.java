@@ -12,9 +12,13 @@ import org.broadinstitute.hellbender.cmdline.StandardArgumentDefinitions;
 import org.broadinstitute.hellbender.cmdline.programgroups.CopyNumberProgramGroup;
 import org.broadinstitute.hellbender.engine.spark.SparkContextFactory;
 import org.broadinstitute.hellbender.exceptions.UserException;
-import org.broadinstitute.hellbender.tools.coveragemodel.*;
+import org.broadinstitute.hellbender.tools.coveragemodel.CoverageModelEMAlgorithm;
+import org.broadinstitute.hellbender.tools.coveragemodel.CoverageModelEMParams;
+import org.broadinstitute.hellbender.tools.coveragemodel.CoverageModelEMWorkspace;
+import org.broadinstitute.hellbender.tools.coveragemodel.CoverageModelParameters;
 import org.broadinstitute.hellbender.tools.exome.*;
 import org.broadinstitute.hellbender.tools.exome.germlinehmm.IntegerCopyNumberState;
+import org.broadinstitute.hellbender.tools.exome.germlinehmm.IntegerCopyNumberTransitionMatrixCollection;
 import org.broadinstitute.hellbender.tools.exome.germlinehmm.IntegerCopyNumberTransitionProbabilityCacheCollection;
 import org.broadinstitute.hellbender.tools.exome.sexgenotyper.ContigGermlinePloidyAnnotationTableReader;
 import org.broadinstitute.hellbender.tools.exome.sexgenotyper.GermlinePloidyAnnotatedTargetCollection;
@@ -279,8 +283,10 @@ public final class CoverageModellerGermlineSparkToggle extends SparkToggleComman
         final IntegerCopyNumberTransitionProbabilityCacheCollection transitionProbabilityCacheCollection;
         try (final Reader copyNumberTransitionPriorTableReader = getReaderFromURI(copyNumberTransitionPriorTableURI)) {
             final String parentURI = new File(copyNumberTransitionPriorTableURI).getParent();
+            final IntegerCopyNumberTransitionMatrixCollection transitionMatrixCollection =
+                    IntegerCopyNumberTransitionMatrixCollection.read(copyNumberTransitionPriorTableReader, parentURI);
             transitionProbabilityCacheCollection = new IntegerCopyNumberTransitionProbabilityCacheCollection(
-                    copyNumberTransitionPriorTableReader, parentURI, true);
+                    transitionMatrixCollection, true);
         } catch (final IOException ex) {
             ex.printStackTrace();
             throw new UserException.CouldNotReadInputFile("Could not parse the copy number transition prior table");
@@ -320,7 +326,7 @@ public final class CoverageModellerGermlineSparkToggle extends SparkToggleComman
 
         logger.info("Saving posteriors to disk...");
         workspace.savePosteriors(new File(outputPath, FINAL_POSTERIORS_SUBDIR).getAbsolutePath(),
-                PosteriorVerbosityLevel.EXTENDED);
+                CoverageModelEMWorkspace.PosteriorVerbosityLevel.EXTENDED);
     }
 
     /**

@@ -150,17 +150,17 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
     /**
      * The latest RDD of compute blocks
      */
-    private JavaPairRDD<LinearSpaceBlock, CoverageModelEMComputeBlock> computeRDD;
+    private JavaPairRDD<LinearlySpacedIndexBlock, CoverageModelEMComputeBlock> computeRDD;
 
     /**
      * The latest checkpointed RDD of compute blocks
      */
-    private JavaPairRDD<LinearSpaceBlock, CoverageModelEMComputeBlock> prevCheckpointedComputeRDD;
+    private JavaPairRDD<LinearlySpacedIndexBlock, CoverageModelEMComputeBlock> prevCheckpointedComputeRDD;
 
     /**
      * A deque of cached RDDs of compute blocks
      */
-    private Deque<JavaPairRDD<LinearSpaceBlock, CoverageModelEMComputeBlock>> prevCachedComputeRDDDeque = new LinkedList<>();
+    private Deque<JavaPairRDD<LinearlySpacedIndexBlock, CoverageModelEMComputeBlock>> prevCachedComputeRDDDeque = new LinkedList<>();
 
     /**
      * Counts the number of calls made to {@link CoverageModelEMWorkspace#cacheWorkers(String)} since
@@ -183,7 +183,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
     /**
      * List of target-space block specs
      */
-    protected List<LinearSpaceBlock> targetBlocks;
+    protected List<LinearlySpacedIndexBlock> targetBlocks;
 
     /* Driver node copy of posteriors --- BEGIN */
 
@@ -493,7 +493,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
     private void initializeTargetSpaceBlocks() {
         targetBlocks = CoverageModelSparkUtils.createLinearSpaceBlocks(numTargets, numTargetBlocks,
                 CoverageModelGlobalConstants.DEFAULT_MIN_TARGET_BLOCK_SIZE);
-        logger.debug("Target space blocks: " + targetBlocks.stream().map(LinearSpaceBlock::toString)
+        logger.debug("Target space blocks: " + targetBlocks.stream().map(LinearlySpacedIndexBlock::toString)
                 .reduce((L, R) -> L + "\t" + R).orElse("None"));
     }
 
@@ -524,7 +524,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
         logger.info("Collecting coverage data to the driver node...");
         final List<ReadCountRecord> recs = processedReadCounts.records();
 
-        final List<Tuple2<LinearSpaceBlock, CoverageModelEMComputeBlock.InitialDataBlock>> dataBlockList =
+        final List<Tuple2<LinearlySpacedIndexBlock, CoverageModelEMComputeBlock.InitialDataBlock>> dataBlockList =
                 new ArrayList<>();
 
         targetBlockStream().forEach(tb -> {
@@ -603,7 +603,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
 
         /* basic model nodes */
         mapWorkers(cb -> {
-            final LinearSpaceBlock tb = cb.getTargetSpaceBlock();
+            final LinearlySpacedIndexBlock tb = cb.getTargetSpaceBlock();
             return cb
                     .cloneWithUpdatedPrimitive(CoverageModelEMComputeBlock.CoverageModelICGCacheNode.m_t,
                             broadcastedModel.getValue().getTargetMeanBiasOnTargetBlock(tb))
@@ -614,7 +614,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
         /* nodes relating to bias covariates */
         if (biasCovariatesEnabled) {
             mapWorkers(cb -> {
-                final LinearSpaceBlock tb = cb.getTargetSpaceBlock();
+                final LinearlySpacedIndexBlock tb = cb.getTargetSpaceBlock();
                 return cb
                         .cloneWithUpdatedPrimitive(CoverageModelEMComputeBlock.CoverageModelICGCacheNode.W_tl,
                                 broadcastedModel.getValue().getMeanBiasCovariatesOnTargetBlock(tb));
@@ -624,7 +624,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
         /* if ARD is enabled, inject ARD coefficients */
         if (ardEnabled) {
             mapWorkers(cb -> {
-                final LinearSpaceBlock tb = cb.getTargetSpaceBlock();
+                final LinearlySpacedIndexBlock tb = cb.getTargetSpaceBlock();
                 return cb
                         .cloneWithUpdatedPrimitive(CoverageModelEMComputeBlock.CoverageModelICGCacheNode.alpha_l,
                                 broadcastedModel.getValue().getBiasCovariateARDCoefficients());
@@ -636,7 +636,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
     private void initializeWorkersWithGivenModelLocal(@Nonnull final CoverageModelParameters model) {
         /* basic model nodes */
         mapWorkers(cb -> {
-            final LinearSpaceBlock tb = cb.getTargetSpaceBlock();
+            final LinearlySpacedIndexBlock tb = cb.getTargetSpaceBlock();
             return cb
                     .cloneWithUpdatedPrimitive(CoverageModelEMComputeBlock.CoverageModelICGCacheNode.m_t,
                             model.getTargetMeanBiasOnTargetBlock(tb))
@@ -647,7 +647,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
         /* nodes relating to bias covariates */
         if (biasCovariatesEnabled) {
             mapWorkers(cb -> {
-                final LinearSpaceBlock tb = cb.getTargetSpaceBlock();
+                final LinearlySpacedIndexBlock tb = cb.getTargetSpaceBlock();
                 return cb
                         .cloneWithUpdatedPrimitive(CoverageModelEMComputeBlock.CoverageModelICGCacheNode.W_tl,
                                 model.getMeanBiasCovariatesOnTargetBlock(tb));
@@ -708,16 +708,16 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
                 .toArray(), new int[] {numSamples, 1}));
 
         /* push per-target copy ratio expectations to workers */
-        final List<Tuple2<LinearSpaceBlock, Tuple2<INDArray, INDArray>>> copyRatioPriorsList = new ArrayList<>();
-        for (final LinearSpaceBlock tb : targetBlocks) {
-            final double[] logCopyRatioPriorMeansBlock = IntStream.range(0, tb.getNumTargets())
+        final List<Tuple2<LinearlySpacedIndexBlock, Tuple2<INDArray, INDArray>>> copyRatioPriorsList = new ArrayList<>();
+        for (final LinearlySpacedIndexBlock tb : targetBlocks) {
+            final double[] logCopyRatioPriorMeansBlock = IntStream.range(0, tb.getNumElements())
                     .mapToObj(rti -> copyRatioPriorExpectationsList.stream()
                             .mapToDouble(cre -> cre.getLogCopyRatioMeans()[rti + tb.getBegIndex()])
                             .toArray())
                     .flatMapToDouble(Arrays::stream)
                     .toArray();
 
-            final double[] logCopyRatioPriorVariancesBlock = IntStream.range(0, tb.getNumTargets())
+            final double[] logCopyRatioPriorVariancesBlock = IntStream.range(0, tb.getNumElements())
                     .mapToObj(rti -> copyRatioPriorExpectationsList.stream()
                             .mapToDouble(cre -> cre.getLogCopyRatioVariances()[rti + tb.getBegIndex()])
                             .toArray())
@@ -729,8 +729,8 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
              * {@link CoverageModelEMComputeBlock#cloneWithInitializedData} */
 
             copyRatioPriorsList.add(new Tuple2<>(tb, new Tuple2<INDArray, INDArray>(
-                    Nd4j.create(logCopyRatioPriorMeansBlock, new int[] {numSamples, tb.getNumTargets()}, 'f'),
-                    Nd4j.create(logCopyRatioPriorVariancesBlock, new int[] {numSamples, tb.getNumTargets()}, 'f'))));
+                    Nd4j.create(logCopyRatioPriorMeansBlock, new int[] {numSamples, tb.getNumElements()}, 'f'),
+                    Nd4j.create(logCopyRatioPriorVariancesBlock, new int[] {numSamples, tb.getNumElements()}, 'f'))));
         }
 
         /* push to compute blocks */
@@ -782,9 +782,9 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
         /* initially, set m_t and Psi_t to zero and update an estimate of read depth */
         mapWorkers(cb -> cb
                 .cloneWithUpdatedPrimitive(CoverageModelEMComputeBlock.CoverageModelICGCacheNode.m_t,
-                        Nd4j.zeros(new int[] {1, cb.getTargetSpaceBlock().getNumTargets()}))
+                        Nd4j.zeros(new int[] {1, cb.getTargetSpaceBlock().getNumElements()}))
                 .cloneWithUpdatedPrimitive(CoverageModelEMComputeBlock.CoverageModelICGCacheNode.Psi_t,
-                        Nd4j.zeros(new int[] {1, cb.getTargetSpaceBlock().getNumTargets()})));
+                        Nd4j.zeros(new int[] {1, cb.getTargetSpaceBlock().getNumElements()})));
 
         /* update read depth without taking into account correction from bias covariates */
         updateReadDepthPosteriorExpectations(1.0, true);
@@ -1265,7 +1265,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
         final List<SubroutineSignal> sigs = mapWorkersAndCollect(CoverageModelEMComputeBlock::getLatestMStepSignal);
 
         final double errorNormInfinity = Collections.max(sigs.stream()
-                .map(sig -> sig.getDouble("error_norm"))
+                .map(sig -> sig.<Double>get("error_norm"))
                 .collect(Collectors.toList()));
 
         return SubroutineSignal.builder()
@@ -1280,7 +1280,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
      */
     private List<List<CoverageModelCopyRatioEmissionData>> fetchCopyRatioEmissionDataLocal() {
         /* fetch data from workers */
-        final List<ImmutablePair<LinearSpaceBlock, List<List<CoverageModelCopyRatioEmissionData>>>> collectedCopyRatioData =
+        final List<ImmutablePair<LinearlySpacedIndexBlock, List<List<CoverageModelCopyRatioEmissionData>>>> collectedCopyRatioData =
                 mapWorkersAndCollect(cb -> ImmutablePair.of(cb.getTargetSpaceBlock(), cb.getSampleCopyRatioLatentPosteriorData()));
         /* assemble and return */
         return IntStream.range(0, numSamples).parallel()
@@ -1349,7 +1349,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
     @EvaluatesRDD @UpdatesRDD @CachesRDD
     private SubroutineSignal updateCopyRatioPosteriorExpectationsSpark(final double admixingRatio) {
         /* local final member variables for lambda capture */
-        final List<LinearSpaceBlock> targetBlocks = new ArrayList<>();
+        final List<LinearlySpacedIndexBlock> targetBlocks = new ArrayList<>();
         targetBlocks.addAll(this.targetBlocks);
         final List<Target> targetList = new ArrayList<>();
         targetList.addAll(processedTargetList);
@@ -1399,7 +1399,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
         sampleLogChainPosteriors.assign(Nd4j.create(newSampleLogChainPosteriors, new int[] {numSamples, 1}));
 
         /* step 2. repartition in target space */
-        final JavaPairRDD<LinearSpaceBlock, ImmutablePair<INDArray, INDArray>>
+        final JavaPairRDD<LinearlySpacedIndexBlock, ImmutablePair<INDArray, INDArray>>
                 blockifiedCopyRatioPosteriorResultsPairRDD = copyRatioPosteriorExpectationsPairRDD
                 /* flat map to [target block, [sample index, [mean log copy ratio, var log copy ratio]]] */
                 .flatMapToPair(dat -> targetBlocks.stream()
@@ -1443,7 +1443,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
         final List<SubroutineSignal> sigs = mapWorkersAndCollect(CoverageModelEMComputeBlock::getLatestMStepSignal);
 
         final double errorNormInfinity = Collections.max(sigs.stream()
-                .map(sig -> sig.getDouble("error_norm"))
+                .map(sig -> sig.<Double>get("error_norm"))
                 .collect(Collectors.toList()));
 
         return SubroutineSignal.builder()
@@ -1461,7 +1461,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
         return computeRDD
                 /* flat map workers a list of [sample index, [target block, emission data on target block]] */
                 .flatMapToPair(tuple -> {
-                    final LinearSpaceBlock tb = tuple._1;
+                    final LinearlySpacedIndexBlock tb = tuple._1;
                     final CoverageModelEMComputeBlock cb = tuple._2;
                     final List<List<CoverageModelCopyRatioEmissionData>> el = cb.getSampleCopyRatioLatentPosteriorData();
                     return IntStream.range(0, numSamples)
@@ -1483,7 +1483,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
                 .mapValues(emissionBlocksList -> emissionBlocksList.stream() /* for each partition ... */
                         /* sort the data blocks */
                         .sorted(Comparator.comparingInt(t -> t._1.getBegIndex()))
-                        /* remove the LinearSpaceBlock keys from the sorted emissionBlocksList */
+                        /* remove the LinearlySpacedIndexBlock keys from the sorted emissionBlocksList */
                         .map(p -> p._2)
                         /* flatten */
                         .flatMap(List::stream)
@@ -1588,7 +1588,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
         /* accumulate error from all nodes */
         final double errorNormInfinity = Collections.max(
                 mapWorkersAndCollect(CoverageModelEMComputeBlock::getLatestMStepSignal)
-                        .stream().map(sig -> sig.getDouble("error_norm")).collect(Collectors.toList()));
+                        .stream().map(sig -> sig.<Double>get("error_norm")).collect(Collectors.toList()));
 
         return SubroutineSignal.builder().put("error_norm", errorNormInfinity).build();
     }
@@ -1627,11 +1627,11 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
 
         /* accumulate error from all workers */
         final List<SubroutineSignal> signalList = mapWorkersAndCollect(CoverageModelEMComputeBlock::getLatestMStepSignal);
-        final double errorNormInfinity = Collections.max(signalList.stream().map(sig -> sig.getDouble("error_norm"))
+        final double errorNormInfinity = Collections.max(signalList.stream().map(sig -> sig.<Double>get("error_norm"))
                 .collect(Collectors.toList()));
-        final int maxIterations = Collections.max(signalList.stream().map(sig -> sig.getInteger("iterations"))
+        final int maxIterations = Collections.max(signalList.stream().map(sig -> sig.<Integer>get("iterations"))
                 .collect(Collectors.toList()));
-        final int minIterations = Collections.min(signalList.stream().map(sig -> sig.getInteger("iterations"))
+        final int minIterations = Collections.min(signalList.stream().map(sig -> sig.<Integer>get("iterations"))
                 .collect(Collectors.toList()));
         return SubroutineSignal.builder()
                 .put("error_norm", errorNormInfinity)
@@ -1681,7 +1681,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
         final int maxIterations = solver.getEvaluations();
         final double finalizedNewIsotropicPsi = newIsotropicPsi;
         mapWorkers(cb -> cb.cloneWithUpdatedPrimitive(CoverageModelEMComputeBlock.CoverageModelICGCacheNode.Psi_t,
-                Nd4j.zeros(1, cb.getTargetSpaceBlock().getNumTargets()).addi(finalizedNewIsotropicPsi)));
+                Nd4j.zeros(1, cb.getTargetSpaceBlock().getNumElements()).addi(finalizedNewIsotropicPsi)));
         return SubroutineSignal.builder()
                 .put("error_norm", errNormInfinity)
                 .put("iterations", maxIterations).build();
@@ -1763,7 +1763,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
         /* accumulate error from all nodes */
         final double errorNormInfinity = Collections.max(
                 mapWorkersAndCollect(CoverageModelEMComputeBlock::getLatestMStepSignal)
-                        .stream().map(sig -> sig.getDouble("error_norm")).collect(Collectors.toList()));
+                        .stream().map(sig -> sig.<Double>get("error_norm")).collect(Collectors.toList()));
 
         return SubroutineSignal.builder().put("error_norm", errorNormInfinity).build();
     }
@@ -1805,13 +1805,13 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
                 (double)(endTime - startTime)/1000000 + " ms");
 
         /* check the exit status of the solver and push the new W to workers */
-        final ExitStatus exitStatus = (ExitStatus)sig.getObject("status");
+        final ExitStatus exitStatus = sig.get("status");
         if (exitStatus == ExitStatus.FAIL_MAX_ITERS) {
             logger.warn("CG iterations for M-step update of bias covariates did not converge. Increase maximum iterations" +
                     " and/or decrease absolute/relative error tolerances");
         }
-        final int iters = sig.getInteger("iterations");
-        final INDArray W_tl_new = sig.getINDArray("x");
+        final int iters = sig.<Integer>get("iterations");
+        final INDArray W_tl_new = sig.<INDArray>get("x");
 
         switch (params.getBiasCovariatesComputeNodeCommunicationPolicy()) {
             case BROADCAST_HASH_JOIN:
@@ -2010,7 +2010,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
      *
      * If Spark is enabled:
      *
-     *      Joins an instance of {@code List<Tuple2<LinearSpaceBlock, V>>} with {@link #computeRDD}, calls the provided
+     *      Joins an instance of {@code List<Tuple2<LinearlySpacedIndexBlock, V>>} with {@link #computeRDD}, calls the provided
      *      map {@code mapper} on the RDD, and the reference to the old RDD will be replaced with the new RDD.
      *
      * If Spark is disabled:
@@ -2026,10 +2026,10 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
      * @param <V> the type of the object to the broadcasted
      */
     @UpdatesRDD
-    private <V> void joinWithWorkersAndMap(@Nonnull final List<Tuple2<LinearSpaceBlock, V>> data,
+    private <V> void joinWithWorkersAndMap(@Nonnull final List<Tuple2<LinearlySpacedIndexBlock, V>> data,
                                            @Nonnull final Function<Tuple2<CoverageModelEMComputeBlock, V>, CoverageModelEMComputeBlock> mapper) {
         if (sparkContextIsAvailable) {
-            final JavaPairRDD<LinearSpaceBlock, V> newRDD =
+            final JavaPairRDD<LinearlySpacedIndexBlock, V> newRDD =
                     ctx.parallelizePairs(data, numTargetBlocks).partitionBy(new HashPartitioner(numTargetBlocks));
             computeRDD = computeRDD.join(newRDD).mapValues(mapper);
         } else {
@@ -2221,7 +2221,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
      * @param arr the input array
      * @return list of key-value blocks
      */
-    private List<Tuple2<LinearSpaceBlock, INDArray>> chopINDArrayToBlocks(final INDArray arr) {
+    private List<Tuple2<LinearlySpacedIndexBlock, INDArray>> chopINDArrayToBlocks(final INDArray arr) {
         if (sparkContextIsAvailable) {
             return CoverageModelSparkUtils.partitionINDArrayToAList(targetBlocks, arr);
         } else {
@@ -2235,7 +2235,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
      * @param arr the input array
      * @return list of key-value blocks
      */
-    private Map<LinearSpaceBlock, INDArray> mapINDArrayToBlocks(final INDArray arr) {
+    private Map<LinearlySpacedIndexBlock, INDArray> mapINDArrayToBlocks(final INDArray arr) {
         if (sparkContextIsAvailable) {
             return CoverageModelSparkUtils.partitionINDArrayToAMap(targetBlocks, arr);
         } else {
@@ -2250,14 +2250,14 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
      * @param arr2 second INDArray
      * @return a map from target-space blocks to partitioned pairs
      */
-    private Map<LinearSpaceBlock, ImmutablePair<INDArray, INDArray>> mapINDArrayPairToBlocks(final INDArray arr1,
-                                                                                             final INDArray arr2) {
+    private Map<LinearlySpacedIndexBlock, ImmutablePair<INDArray, INDArray>> mapINDArrayPairToBlocks(final INDArray arr1,
+                                                                                                     final INDArray arr2) {
         if (sparkContextIsAvailable) {
-            final Map<LinearSpaceBlock, INDArray> map1 =
+            final Map<LinearlySpacedIndexBlock, INDArray> map1 =
                     CoverageModelSparkUtils.partitionINDArrayToAMap(targetBlocks, arr1);
-            final Map<LinearSpaceBlock, INDArray> map2 =
+            final Map<LinearlySpacedIndexBlock, INDArray> map2 =
                     CoverageModelSparkUtils.partitionINDArrayToAMap(targetBlocks, arr2);
-            final Map<LinearSpaceBlock, ImmutablePair<INDArray, INDArray>> res = new HashMap<>();
+            final Map<LinearlySpacedIndexBlock, ImmutablePair<INDArray, INDArray>> res = new HashMap<>();
             targetBlockStream().forEach(tb -> res.put(tb, ImmutablePair.of(map1.get(tb), map2.get(tb))));
             return res;
         } else {
@@ -2273,11 +2273,11 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
     private IntStream sampleIndexStream() { return IntStream.range(0, numSamples); }
 
     /**
-     * Returns a {@link Stream<LinearSpaceBlock>} of target-space blocks
+     * Returns a {@link Stream< LinearlySpacedIndexBlock >} of target-space blocks
      *
-     * @return {@link Stream<LinearSpaceBlock>}
+     * @return {@link Stream< LinearlySpacedIndexBlock >}
      */
-    private Stream<LinearSpaceBlock> targetBlockStream() { return targetBlocks.stream(); }
+    private Stream<LinearlySpacedIndexBlock> targetBlockStream() { return targetBlocks.stream(); }
 
     /**
      * Calls gc() on all compute blocks
@@ -2617,5 +2617,21 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
             Nd4jIOUtils.writeNDArrayMatrixToTextFile(fetchTotalCovariateBiasPerSample(), totalCovariateBiasFile,
                     "TOTAL_COVARIATE_BIAS", targetNames, sampleNames);
         }
+    }
+
+    /**
+     * Represents the verbosity level of output posteriors; see {@link #savePosteriors}
+     */
+    public enum PosteriorVerbosityLevel {
+        /**
+         * Basic posteriors (read depth, log likelihood, unexplained variance, bias covariates, ARD coefficients,
+         * copy ratio segments, copy ratio max likelihood point estimates)
+         */
+        BASIC,
+
+        /**
+         * Extended posteriors (basic + total unexplained variance, total explained variance by bias covariates)
+         */
+        EXTENDED
     }
 }

@@ -14,43 +14,43 @@ import java.util.stream.IntStream;
 /**
  * This class represents a key for a contiguous block of elements in an indexed linear space.
  *
- * The begin index is include
+ * The begin index is inclusive
  * The end index is exclusive
  *
  * @author Mehrtash Babadi &lt;mehrtash@broadinstitute.org&gt;
  */
-public final class LinearSpaceBlock implements Serializable {
+final class LinearlySpacedIndexBlock implements Serializable {
 
     private static final long serialVersionUID = 4571138983754570342L;
 
     /* begin index inclusive, end index exclusive */
-    private final int begIndex, endIndex, numTargets;
+    private final int begIndex, endIndex, numElements;
 
-    public LinearSpaceBlock(final int begIndex, final int endIndex) {
+    public LinearlySpacedIndexBlock(final int begIndex, final int endIndex) {
         this.begIndex = ParamUtils.isPositiveOrZero(begIndex, "The begin index of a block must be non-negative.");
         this.endIndex = ParamUtils.inRange(endIndex, begIndex + 1, Integer.MAX_VALUE, "The block must at least" +
                 " contain one element.");
-        numTargets = endIndex - begIndex;
+        numElements = endIndex - begIndex;
     }
 
     public int getBegIndex() { return begIndex; }
 
     public int getEndIndex() { return endIndex; }
 
-    public int getNumTargets() { return numTargets; }
+    public int getNumElements() { return numElements; }
 
     /**
-     * Asserts that a collection of linear space blocks are non-overlapping and fully-covering (i.e. there is no
+     * Asserts that a collection of linearly spaced index blocks are non-overlapping and fully-covering (i.e. there is no
      * gap between them)
      *
      * @param blocks a collection of linear space blocks
      * @throws IllegalArgumentException if the collection is null
      * @throws AssertionError if blocks overlap or there is a gap between them
      */
-    public static void assertNonOverlappingFullyCovering(@Nonnull final Collection<LinearSpaceBlock> blocks) {
+    public static void assertNonOverlappingFullyCovering(@Nonnull final Collection<LinearlySpacedIndexBlock> blocks) {
         Utils.nonNull(blocks, "The collection of linear space blocks must be non-null");
-        final List<LinearSpaceBlock> sortedBlocks = blocks.stream()
-                .sorted(Comparator.comparingInt(LinearSpaceBlock::getBegIndex))
+        final List<LinearlySpacedIndexBlock> sortedBlocks = blocks.stream()
+                .sorted(Comparator.comparingInt(LinearlySpacedIndexBlock::getBegIndex))
                 .collect(Collectors.toList());
         if (!IntStream.range(0, sortedBlocks.size() - 1)
                 .allMatch(idx -> sortedBlocks.get(idx).getEndIndex() == sortedBlocks.get(idx + 1).getBegIndex())) {
@@ -63,16 +63,16 @@ public final class LinearSpaceBlock implements Serializable {
         if (this == o) {
             return true;
         }
-        if (!(o instanceof LinearSpaceBlock)) {
+        if (!(o instanceof LinearlySpacedIndexBlock)) {
             return false;
         }
 
-        final LinearSpaceBlock block = (LinearSpaceBlock) o;
+        final LinearlySpacedIndexBlock block = (LinearlySpacedIndexBlock) o;
         return (begIndex == block.begIndex) && (endIndex == block.endIndex);
     }
 
     /**
-     * The best hash code is the {@link LinearSpaceBlock#begIndex} for non-overlapping and fully-covering
+     * The best hash code is the {@link LinearlySpacedIndexBlock#begIndex} for non-overlapping and fully-covering
      * blocks
      *
      * @return hash code
