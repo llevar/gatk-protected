@@ -9,7 +9,7 @@ import javax.annotation.Nonnull;
  *
  * @author Mehrtash Babadi &lt;mehrtash@broadinstitute.org&gt;
  */
-public abstract class GeneralLinearOperator<V> {
+public abstract class GeneralLinearOperator<VECTOR> {
 
     /**
      * Returns the dimension of the codomain of this operator.
@@ -33,7 +33,7 @@ public abstract class GeneralLinearOperator<V> {
      * @throws DimensionMismatchException if the column dimension does not match
      * the size of {@code x}
      */
-    public abstract V operate(@Nonnull final V x)
+    public abstract VECTOR operate(@Nonnull final VECTOR x)
             throws DimensionMismatchException;
 
     /**
@@ -50,15 +50,15 @@ public abstract class GeneralLinearOperator<V> {
      * @throws UnsupportedOperationException if this operation is not supported
      * by {@code this} operator
      */
-    public V operateTranspose(@Nonnull final V x)
+    public VECTOR operateTranspose(@Nonnull final VECTOR x)
             throws DimensionMismatchException, UnsupportedOperationException {
         throw new UnsupportedOperationException();
     }
 
     /**
      * Returns {@code true} if this operator supports
-     * {@link #operateTranspose(V)}. If {@code true} is returned,
-     * {@link #operateTranspose(V)} should not throw
+     * {@link #operateTranspose(VECTOR)}. If {@code true} is returned,
+     * {@link #operateTranspose(VECTOR)} should not throw
      * {@code UnsupportedOperationException}. The default implementation returns
      * {@code false}.
      *
@@ -75,7 +75,7 @@ public abstract class GeneralLinearOperator<V> {
      * @throws DimensionMismatchException
      * @throws UnsupportedOperationException
      */
-    public void updateRow(final int rowIndex, @Nonnull final V row)
+    public void updateRow(final int rowIndex, @Nonnull final VECTOR row)
             throws DimensionMismatchException, UnsupportedOperationException {
         throw new UnsupportedOperationException();
     }
@@ -87,7 +87,7 @@ public abstract class GeneralLinearOperator<V> {
      * @throws DimensionMismatchException
      * @throws UnsupportedOperationException
      */
-    public void updateColumn(final int colIndex, @Nonnull final V col)
+    public void updateColumn(final int colIndex, @Nonnull final VECTOR col)
             throws DimensionMismatchException, UnsupportedOperationException {
         throw new UnsupportedOperationException();
     }

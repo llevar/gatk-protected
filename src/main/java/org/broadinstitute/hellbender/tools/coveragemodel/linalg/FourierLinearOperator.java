@@ -17,7 +17,7 @@ import static org.broadinstitute.hellbender.utils.GATKProtectedMathUtils.smalles
  *
  * @author Mehrtash Babadi &lt;mehrtash@broadinstitute.org&gt;
  */
-public abstract class FourierLinearOperator<V> extends GeneralLinearOperator<V> {
+public abstract class FourierLinearOperator<VECTOR> extends GeneralLinearOperator<VECTOR> {
 
     protected final int dimension;
     protected final int fftSize;
@@ -71,7 +71,7 @@ public abstract class FourierLinearOperator<V> extends GeneralLinearOperator<V> 
     public int getFFTSize() { return fftSize; }
 
     @Override
-    public V operateTranspose(@Nonnull final V x)
+    public VECTOR operateTranspose(@Nonnull final VECTOR x)
             throws DimensionMismatchException, UnsupportedOperationException {
         return operate(x);
     }

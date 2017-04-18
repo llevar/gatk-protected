@@ -35,7 +35,7 @@ import java.util.stream.IntStream;
  */
 public final class CoverageModelWLinearOperatorSpark extends GeneralLinearOperator<INDArray> {
 
-    private final Logger logger = LogManager.getLogger(CoverageModelWLinearOperatorSpark.class);
+    private static final Logger logger = LogManager.getLogger(CoverageModelWLinearOperatorSpark.class);
 
     private final int numLatents, numTargets;
     private final INDArray Z_ll;

@@ -80,14 +80,14 @@ public final class XHMMModel extends CopyNumberTriStateHiddenMarkovModel<XHMMEmi
     }
 
     /**
-     * See {@link Target#calculateDistance(Target, Target, double)}
+     * See {@link Target#calculateDistance(Target, Target)}
      *
      * @param fromTarget first target
      * @param toTarget second target
      * @return distance
      */
     public static double calculateDistance(final Target fromTarget, final Target toTarget) {
-        return Target.calculateDistance(fromTarget, toTarget, DEFAULT_DISTANCE_BETWEEN_TARGETS);
+        return Target.calculateDistance(fromTarget, toTarget);
     }
 
     /**

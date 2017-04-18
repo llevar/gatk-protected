@@ -1,7 +1,7 @@
 package org.broadinstitute.hellbender.tools.coveragemodel;
 
-import org.broadinstitute.hdf5.Utils;
 import org.broadinstitute.hellbender.tools.exome.sexgenotyper.SexGenotypeData;
+import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.param.ParamUtils;
 
 import javax.annotation.Nonnull;
@@ -127,7 +127,6 @@ public final class CopyRatioCallingMetadata implements Serializable {
         return new SampleMetadataBuilder();
     }
 
-
     public static class SampleMetadataBuilder implements Serializable {
 
         private static final long serialVersionUID = 4431390529312114201L;
@@ -138,32 +137,32 @@ public final class CopyRatioCallingMetadata implements Serializable {
             this.metadata = new CopyRatioCallingMetadata();
         }
 
-        public SampleMetadataBuilder setSampleName(@Nonnull final String sampleName) {
+        public SampleMetadataBuilder sampleName(@Nonnull final String sampleName) {
             metadata.setSampleName(sampleName);
             return this;
         }
 
-        public SampleMetadataBuilder setSampleIndex(@Nonnull final Integer sampleIndex) {
+        public SampleMetadataBuilder sampleIndex(@Nonnull final Integer sampleIndex) {
             metadata.setSampleIndex(sampleIndex);
             return this;
         }
 
-        public SampleMetadataBuilder setSampleSexGenotypeData(@Nonnull final SexGenotypeData sexGenotypeData) {
+        public SampleMetadataBuilder sampleSexGenotypeData(@Nonnull final SexGenotypeData sexGenotypeData) {
             metadata.setSampleSexGenotypeData(sexGenotypeData);
             return this;
         }
 
-        public SampleMetadataBuilder setSampleCoverageDepth(@Nonnull final Double sampleCoverageDepth) {
+        public SampleMetadataBuilder sampleCoverageDepth(@Nonnull final Double sampleCoverageDepth) {
             metadata.setSampleCoverageDepth(sampleCoverageDepth);
             return this;
         }
 
-        public SampleMetadataBuilder setSampleAverageMappingErrorProbability(@Nonnull final Double sampleAverageMappingErrorProbability) {
+        public SampleMetadataBuilder sampleAverageMappingErrorProbability(@Nonnull final Double sampleAverageMappingErrorProbability) {
             metadata.setSampleAverageMappingErrorProbability(sampleAverageMappingErrorProbability);
             return this;
         }
 
-        public SampleMetadataBuilder setEmissionCalculationStrategy(@Nonnull final EmissionCalculationStrategy emissionCalculationStrategy) {
+        public SampleMetadataBuilder emissionCalculationStrategy(@Nonnull final EmissionCalculationStrategy emissionCalculationStrategy) {
             metadata.setEmissionCalculationStrategy(emissionCalculationStrategy);
             return this;
         }

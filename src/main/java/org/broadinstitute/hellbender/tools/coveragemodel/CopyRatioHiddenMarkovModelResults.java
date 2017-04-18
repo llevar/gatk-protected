@@ -12,17 +12,17 @@ import java.util.List;
  * This class stores the results of forward-backward and Viterbi algorithms for HMM-based
  * copy ratio (or copy number) models.
  *
- * @param <D> copy ratio emission data type
- * @param <S> type of hidden state
+ * @param <DATA> copy ratio emission data type
+ * @param <STATE> type of hidden state
  *
  * @author Mehrtash Babadi &lt;mehrtash@broadinstitute.org&gt;
  */
-public final class CopyRatioHiddenMarkovModelResults<D, S> implements Serializable {
+public final class CopyRatioHiddenMarkovModelResults<DATA, STATE> implements Serializable {
 
     private static final long serialVersionUID = 1891158919985229044L;
     private final CopyRatioCallingMetadata metaData;
-    private final ForwardBackwardAlgorithm.Result<D, Target, S> fbResult;
-    private final List<S> viterbiResult;
+    private final ForwardBackwardAlgorithm.Result<DATA, Target, STATE> fbResult;
+    private final List<STATE> viterbiResult;
 
     /**
      * Public constructor.
@@ -31,8 +31,8 @@ public final class CopyRatioHiddenMarkovModelResults<D, S> implements Serializab
      * @param viterbiResult the result of Viterbi algorithm
      */
     public CopyRatioHiddenMarkovModelResults(@Nonnull final CopyRatioCallingMetadata metaData,
-                                             @Nonnull final ForwardBackwardAlgorithm.Result<D, Target, S> fbResult,
-                                             @Nonnull final List<S> viterbiResult) {
+                                             @Nonnull final ForwardBackwardAlgorithm.Result<DATA, Target, STATE> fbResult,
+                                             @Nonnull final List<STATE> viterbiResult) {
         this.metaData = Utils.nonNull(metaData, "Copy ratio calling metadata must be non-null");
         this.fbResult = Utils.nonNull(fbResult, "The forward-backward result must be non-null");
         this.viterbiResult = Utils.nonNull(viterbiResult, "The viterbi result must be non-null");
@@ -41,11 +41,11 @@ public final class CopyRatioHiddenMarkovModelResults<D, S> implements Serializab
                 " an inconsistency.");
     }
 
-    public ForwardBackwardAlgorithm.Result<D, Target, S> getForwardBackwardResult() {
+    public ForwardBackwardAlgorithm.Result<DATA, Target, STATE> getForwardBackwardResult() {
         return fbResult;
     }
 
-    public List<S> getViterbiResult() {
+    public List<STATE> getViterbiResult() {
         return viterbiResult;
     }
 

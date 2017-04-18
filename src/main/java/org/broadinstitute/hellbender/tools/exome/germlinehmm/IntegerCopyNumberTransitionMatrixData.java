@@ -5,10 +5,10 @@ import org.apache.commons.math3.linear.RealMatrix;
 import org.apache.commons.math3.util.FastMath;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.broadinstitute.hdf5.Utils;
 import org.broadinstitute.hellbender.exceptions.UserException;
 import org.broadinstitute.hellbender.tools.coveragemodel.nd4jutils.Nd4jApacheAdapterUtils;
 import org.broadinstitute.hellbender.tools.coveragemodel.nd4jutils.Nd4jIOUtils;
+import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.param.ParamUtils;
 
 import javax.annotation.Nonnull;
@@ -27,7 +27,7 @@ import java.util.Arrays;
  */
 public final class IntegerCopyNumberTransitionMatrixData {
 
-    private final Logger logger = LogManager.getLogger(IntegerCopyNumberTransitionMatrixData.class);
+    private static final Logger logger = LogManager.getLogger(IntegerCopyNumberTransitionMatrixData.class);
 
     private static final double PROBABILITY_NORMALIZATION_TOL = 1e-6;
 

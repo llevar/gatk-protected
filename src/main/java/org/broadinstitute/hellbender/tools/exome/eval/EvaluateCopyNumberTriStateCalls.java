@@ -459,8 +459,11 @@ public final class EvaluateCopyNumberTriStateCalls extends CommandLineProgram {
             } else {
                 builder.filter(EvaluationFilter.PASS);
             }
-        } else { /* assume it is neutral */
-            /* TODO this is a hack to make CODEX vcf work */
+        } else { /* assume it is REF */
+            /* TODO this is a hack to make Andrey's CODEX vcf work; and in general, VCFs that only include discovered
+             * variants and NO_CALL (".") on other samples. The idea is to force the evaluation tool to take it call
+             * as REF on all other samples. Otherwise, the effective allele frequency of the variant will be erroneously
+             * high and will be filtered. */
             builder.alleles(Collections.singletonList(CopyNumberTriStateAllele.REF));
             builder.attribute(VariantEvaluationContext.CALL_QUALITY_KEY, 100000);
             builder.filter(EvaluationFilter.PASS);
@@ -520,15 +523,15 @@ public final class EvaluateCopyNumberTriStateCalls extends CommandLineProgram {
     }
 
     /**
-     * Return the number of targets corresponding to a variant context and genotype.
+     * Return the number of targets spanned by a variant context.
      *
      * If the genotype has the target count attribute, we use that; otherwise, we infer it from the
      * target list.
      *
-     * @param targets
-     * @param interval
-     * @param g
-     * @return
+     * @param targets master target list
+     * @param interval the interval where the variant belongs
+     * @param g {@link Genotype} of the variant
+     * @return integer count of spanning targets
      */
     private int getTargetCount(final TargetCollection<Target> targets, final Locatable interval, final Genotype g) {
         return GATKProtectedVariantContextUtils.getAttributeAsInt(g,

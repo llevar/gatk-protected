@@ -1,6 +1,6 @@
 package org.broadinstitute.hellbender.tools.coveragemodel;
 
-import org.broadinstitute.hdf5.Utils;
+import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.param.ParamUtils;
 
 import javax.annotation.Nonnull;

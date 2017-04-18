@@ -11,12 +11,12 @@ import java.util.List;
 /**
  * An interface for calculating copy ratio prior and posterior expectations
  *
- * @param <D> emission data type
- * @param <S> hidden state type
+ * @param <DATA> emission data type
+ * @param <STATE> hidden state type
  *
  * @author Mehrtash Babadi &lt;mehrtash@broadinstitute.org&gt;
  */
-public interface CopyRatioExpectationsCalculator<D, S> {
+public interface CopyRatioExpectationsCalculator<DATA, STATE> {
     /**
      * Calculates copy ratio posterior expectations for a given list of targets and emission data
      *
@@ -27,7 +27,7 @@ public interface CopyRatioExpectationsCalculator<D, S> {
      */
     CopyRatioExpectations getCopyRatioPosteriorExpectations(@Nonnull final CopyRatioCallingMetadata copyRatioCallingMetadata,
                                                             @Nonnull final List<Target> targetsList,
-                                                            @Nonnull final List<D> emissionData);
+                                                            @Nonnull final List<DATA> emissionData);
 
     /**
      * Calculates copy ratio prior expectations for a given list of targets and emission data
@@ -47,9 +47,9 @@ public interface CopyRatioExpectationsCalculator<D, S> {
      * @param emissionData list of emission probability calculation data
      * @return an instance of {@link CopyRatioHiddenMarkovModelResults}
      */
-    CopyRatioHiddenMarkovModelResults<D, S> getCopyRatioHiddenMarkovModelResults(@Nonnull final CopyRatioCallingMetadata copyRatioCallingMetadata,
-                                                                                 @Nonnull final List<Target> targetsList,
-                                                                                 @Nonnull final List<D> emissionData);
+    CopyRatioHiddenMarkovModelResults<DATA, STATE> getCopyRatioHiddenMarkovModelResults(@Nonnull final CopyRatioCallingMetadata copyRatioCallingMetadata,
+                                                                                        @Nonnull final List<Target> targetsList,
+                                                                                        @Nonnull final List<DATA> emissionData);
 
     void initializeCaches(@Nonnull final List<Target> allTargets);
 

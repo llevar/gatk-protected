@@ -4,7 +4,7 @@ import org.apache.commons.math3.analysis.solvers.AbstractUnivariateSolver;
 import org.apache.commons.math3.exception.NoBracketingException;
 import org.apache.commons.math3.exception.TooManyEvaluationsException;
 import org.apache.commons.math3.util.FastMath;
-import org.broadinstitute.hdf5.Utils;
+import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.param.ParamUtils;
 
 import java.util.*;

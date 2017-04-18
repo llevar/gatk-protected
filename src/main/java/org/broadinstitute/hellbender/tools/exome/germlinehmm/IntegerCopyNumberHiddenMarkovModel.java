@@ -1,8 +1,8 @@
 package org.broadinstitute.hellbender.tools.exome.germlinehmm;
 
-import org.broadinstitute.hdf5.Utils;
 import org.broadinstitute.hellbender.tools.coveragemodel.interfaces.TargetLikelihoodCalculator;
 import org.broadinstitute.hellbender.tools.exome.Target;
+import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.hmm.HiddenMarkovModel;
 
 import javax.annotation.Nonnull;
@@ -27,9 +27,6 @@ public final class IntegerCopyNumberHiddenMarkovModel<D>
     private final IntegerCopyNumberTransitionProbabilityCacheCollection transitionProbabilityCacheCollection;
 
     private final String sampleSexGenotype;
-
-    /* use this distance if target intervals are unspecified */
-    public static int DEFAULT_DISTANCE_BETWEEN_TARGETS = 10_000;
 
     /**
      * Public constructor.
@@ -80,7 +77,7 @@ public final class IntegerCopyNumberHiddenMarkovModel<D>
                                            @Nonnull final Target currentPosition,
                                            @Nonnull final IntegerCopyNumberState nextState,
                                            @Nonnull final Target nextPosition) {
-        final double distance = Target.calculateDistance(currentPosition, nextPosition, DEFAULT_DISTANCE_BETWEEN_TARGETS);
+        final double distance = Target.calculateDistance(currentPosition, nextPosition);
         if (distance == Double.POSITIVE_INFINITY) {
             return logPriorProbability(nextState, nextPosition);
         } else {
@@ -97,10 +94,6 @@ public final class IntegerCopyNumberHiddenMarkovModel<D>
                 Utils.nonNull(data, "Emission data must be non-null"),
                 Utils.nonNull(state, "Integer copy number state must be non-null").getCopyNumber(),
                 Utils.nonNull(position, "Target must be non-null"));
-    }
-
-    public IntegerCopyNumberTransitionProbabilityCacheCollection getTransitionProbabilityCacheCollection() {
-        return transitionProbabilityCacheCollection;
     }
 
     public void clearCaches() {

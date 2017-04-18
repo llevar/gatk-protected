@@ -7,6 +7,7 @@ import org.apache.commons.math3.stat.descriptive.moment.Variance;
 import org.apache.commons.math3.stat.descriptive.rank.Percentile;
 import org.apache.commons.math3.util.FastMath;
 import org.apache.commons.math3.util.Pair;
+import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.utils.param.ParamUtils;
 
 import javax.annotation.Nonnull;
@@ -29,7 +30,16 @@ public class GATKProtectedMathUtils implements Serializable {
     private GATKProtectedMathUtils() {
     }
 
-    public static final double INV_LN2 = 1.0 / Math.log(2.0);
+    public static final double INV_LOG_2 = 1.0 / Math.log(2.0);
+
+    public static final double INV_LOG_10 = 1.0 / Math.log(10);
+
+    /**
+     * Threshold used to determine best way to calculate log(1-exp(a))
+     * based on https://cran.r-project.org/web/packages/Rmpfr/vignettes/log1mexp-note.pdf
+     */
+    private static final double LN_1_M_EXP_THRESHOLD = - Math.log(2);
+
 
     /**
      * Computes $\log(\sum_i e^{a_i})$ trying to avoid underflow issues by using the log-sum-exp trick.
@@ -301,7 +311,17 @@ public class GATKProtectedMathUtils implements Serializable {
     }
 
     /**
-     * Shrink or expand a double array uniformly using nearest neighbor interpolation
+     * Shrinks or expands a double array uniformly to a given length >= 2 ({@code newLength}) using nearest
+     * neighbor interpolation. The routine works as follows: it puts the array on a uniform partition of the unit
+     * interval on the real axis and and overlaps it with the desired grid. The value at a new grid point is
+     * set to its nearest neighbor from the original grid. For example, if data = {1, 2, 3} and newLength = 4,
+     * the output will be {1, 2, 2, 3}:
+     *
+     *      data     = 1     2     3
+     *      old grid = x     x     x
+     *      new grid = x   x   x   x
+     *      new data = 1   2   2   3
+     *
      * @param data original array
      * @param newLength length of the new array
      * @return interpolated array
@@ -309,13 +329,11 @@ public class GATKProtectedMathUtils implements Serializable {
      */
     public static double[] nearestNeighborUniform1DInterpolate(@Nonnull final double[] data, final int newLength)
             throws IllegalArgumentException {
-        if (data.length == 0)
-            throw new IllegalArgumentException("The input array is empty.");
-        ParamUtils.isPositive(newLength - 1, "The new length of the array must be >= 2");
+        Utils.validateArg(data.length > 0, "The input array is empty.");
+        Utils.validateArg(newLength >= 2, "The new length of the array must be >= 2");
         final double fact = (double)(data.length - 1)/(newLength - 1);
         return IntStream.range(0, newLength).mapToDouble(i -> data[(int) FastMath.floor(i*fact + 0.5)]).toArray();
     }
-
 
     /**
      * Find the maximum difference between entries of two arrays.  This is useful for testing convergence, for example
@@ -324,5 +342,75 @@ public class GATKProtectedMathUtils implements Serializable {
         Utils.validateArg(array1.length == array2.length, "arrays must have same length.");
         Utils.validateArg(array1.length > 0, "arrays must be non-empty");
         return IntStream.range(0, array1.length).mapToDouble(n -> Math.abs(array1[n] - array2[n])).max().getAsDouble();
+    }
+
+    /**
+     * Calculates the complement of a log probability.
+     *
+     * <p>
+     *     With complement of {@code x} we mean: {@code log(1-log(x))}.
+     * </p>
+     * @param x the input log probability.
+     * @return {@code log(1-log(x))}
+     */
+    public static double logProbComplement(final double x) {
+        return x >= LN_1_M_EXP_THRESHOLD
+                ? Math.log(-Math.expm1(x))
+                : Math.log1p(-Math.exp(x));
+    }
+
+    /**
+     * Transform a log scaled probability (x) into the Phred scaled
+     * equivalent or its complement (1-x) Phred scaled equivalent.
+     * <p>
+     *     This method tolerates probabilities slightly larger than 1.0
+     *     (> 0.0 in log scale) which may occur occasionally due to
+     *     float point calculation rounding.
+     * </p>
+     * <p>
+     *     The value returned is a phred score capped by {@code maxPhredScore}.
+     * </p>
+     *
+     * @param rawLogProb the probability.
+     * @param complement whether to return the direct Phred transformation ({@code false})
+     *                    or its complement ({@code true)}.
+     * @param phredScorePrecision Phred score precision (i.e. quantization unit)
+     * @param maxLogProb maximum tolerated log probability
+     * @param maxPhredScore maximum reported Phred score
+     * @return a values between 0 and {@code maxPhredScore}.
+     * @throws GATKException if {@code rawLogProb} is larger than {@code maxLogProb}.
+     */
+    public static double logProbToPhredScore(final double rawLogProb, final boolean complement,
+                                             final double maxPhredScore, final double maxLogProb,
+                                             final double phredScorePrecision) {
+        if (rawLogProb > maxLogProb) {
+            throw new GATKException(String.format("possible numerical instability problem: the log-probability is too" +
+                    " large: %g > 0.0 (with maximum tolerance %g)", rawLogProb, maxLogProb));
+        }
+        /* make sure that the probability is less than 1 in linear scale. there are cases where
+         * log probability exceeds 0.0 due to floating point errors. */
+        final double logProbEqOrLessThan0 = Math.min(0.0, rawLogProb);
+
+        // Accurate way to calculate log(1-exp(a))
+        // based on https://cran.r-project.org/web/packages/Rmpfr/vignettes/log1mexp-note.pdf
+        final double finalLogProb = complement
+                ? logProbComplement(logProbEqOrLessThan0)
+                : logProbEqOrLessThan0;
+
+        final double absoluteQualScore = QualityUtils.phredScaleLog10ErrorRate(finalLogProb * INV_LOG_10);
+        final double exactValue = Math.min(maxPhredScore, absoluteQualScore);
+        // We round the value to the required precession.
+        return roundPhred(exactValue, phredScorePrecision);
+    }
+
+    /**
+     * Round a Phred scaled score to precision {@code phredScorePrecision}
+     *
+     * @param value raw Phred score
+     * @param phredScorePrecision Phred score precision
+     * @return rounded Phred score
+     */
+    public static double roundPhred(final double value, final double phredScorePrecision) {
+        return Math.round(value / phredScorePrecision) * phredScorePrecision;
     }
 }

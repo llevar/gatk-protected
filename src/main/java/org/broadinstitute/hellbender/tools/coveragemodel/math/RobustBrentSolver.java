@@ -219,6 +219,14 @@ public final class RobustBrentSolver {
         }
     }
 
+    /**
+     * This class is an implementation of the Brent root finder. It is copied almost verbatim from
+     * {@link org.apache.commons.math3.analysis.solvers.BrentSolver}. The only difference is that the
+     * {@code solve} in {@link BrentSolverWithInitialFuncEvals} takes 3 additional arguments for
+     * function values on the left and right endpoints and the starting point. It is useful in cases
+     * where function evaluations are expensive, and the function values are already known on the
+     * endpoints and the starting point.
+     */
     static private class BrentSolverWithInitialFuncEvals extends AbstractUnivariateSolver {
         /**
          * Construct a solver.

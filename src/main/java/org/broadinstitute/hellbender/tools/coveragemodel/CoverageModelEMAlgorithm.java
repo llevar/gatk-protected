@@ -27,14 +27,16 @@ import java.util.function.Supplier;
 
  * (see CNV-methods.pdf for technical details).
  *
+ * @param <STATE> copy ratio (or copy number) hidden state type
+ *
  * @author Mehrtash Babadi &lt;mehrtash@broadinstitute.org&gt;
  */
 
-public final class CoverageModelEMAlgorithm<S extends AlleleMetadataProducer & CallStringProducer & ScalarProducer> {
+public final class CoverageModelEMAlgorithm<STATE extends AlleleMetadataProducer & CallStringProducer & ScalarProducer> {
 
-    protected final Logger logger = LogManager.getLogger(CoverageModelEMAlgorithm.class);
+    private static final Logger logger = LogManager.getLogger(CoverageModelEMAlgorithm.class);
     protected final CoverageModelEMParams params;
-    protected final CoverageModelEMWorkspace<S> workspace;
+    protected final CoverageModelEMWorkspace<STATE> workspace;
     protected EMAlgorithmStatus status;
 
     /**
@@ -44,7 +46,7 @@ public final class CoverageModelEMAlgorithm<S extends AlleleMetadataProducer & C
      * @param workspace workspace for actual calculations
      */
     public CoverageModelEMAlgorithm(@Nonnull final CoverageModelEMParams params,
-                                    @Nonnull CoverageModelEMWorkspace<S> workspace) {
+                                    @Nonnull CoverageModelEMWorkspace<STATE> workspace) {
         this.params = Utils.nonNull(params, "Target coverage EM algorithm parameters must be non-null");
         params.validate();
         this.workspace = Utils.nonNull(workspace, "The coverage modeller EM algorithm workspace must be non-null");
@@ -103,16 +105,14 @@ public final class CoverageModelEMAlgorithm<S extends AlleleMetadataProducer & C
      */
     public EMAlgorithmStatus runExpectationMaximization() {
         params.validate();
-        if (params.adaptivePsiSolverModeSwitchingEnabled()) {
-            /* if copy ratio posterior calling is enabled, the first few iterations need to be robust.
-             * Therefore, we disable the target-resolved unexplained variance estimation (if enabled) and
-             * enforce isotropic unexplained variance */
-            if (params.adaptivePsiSolverModeSwitchingEnabled() &&
-                    !this.params.getPsiUpdateMode().equals(CoverageModelEMParams.PsiUpdateMode.PSI_ISOTROPIC)) {
-                this.params.setPsiUpdateMode(CoverageModelEMParams.PsiUpdateMode.PSI_ISOTROPIC);
-                logger.info("Overriding the requested unexplained variance solver to " +
-                        CoverageModelEMParams.PsiUpdateMode.PSI_ISOTROPIC.name());
-            }
+        /* If copy ratio posterior calling is enabled, the first few iterations need to be robust.
+         * Therefore, we disable the target-resolved unexplained variance estimation (if enabled) and
+         * enforce isotropic unexplained variance */
+        if (params.adaptivePsiSolverModeSwitchingEnabled() &&
+                !this.params.getPsiUpdateMode().equals(CoverageModelEMParams.PsiUpdateMode.PSI_ISOTROPIC)) {
+            this.params.setPsiUpdateMode(CoverageModelEMParams.PsiUpdateMode.PSI_ISOTROPIC);
+            logger.info("Overriding the requested unexplained variance solver to " +
+                    CoverageModelEMParams.PsiUpdateMode.PSI_ISOTROPIC.name());
         }
 
         showIterationHeader();
@@ -133,12 +133,14 @@ public final class CoverageModelEMAlgorithm<S extends AlleleMetadataProducer & C
         while (iterInfo.iter <= params.getMaxEMIterations()) {
 
             /* cycle through E-step mean-field equations until they are satisfied to the desired degree */
-            double maxPosteriorErrorNorm = 0;
             int iterEStep = 0;
-
-            while (iterEStep < params.getMaxEStepCycles()) {
-                double posteriorErrorNormReadDepth, posteriorErrorNormSampleUnexplainedVariance,
-                        posteriorErrorNormBias, posteriorErrorNormCopyRatio, posteriorErrorNormBiasCovariates;
+            double maxPosteriorErrorNorm = 2 * params.getPosteriorAbsTol();
+            while (iterEStep < params.getMaxEStepCycles() && maxPosteriorErrorNorm > params.getPosteriorAbsTol()) {
+                double posteriorErrorNormReadDepth;
+                double posteriorErrorNormSampleUnexplainedVariance;
+                double posteriorErrorNormBias;
+                double posteriorErrorNormCopyRatio;
+                double posteriorErrorNormBiasCovariates;
 
                 runRoutine(this::updateReadDepthLatentPosteriorExpectations, s -> "N/A", "E_STEP_D", iterInfo);
                 posteriorErrorNormReadDepth = iterInfo.errorNorm;
@@ -181,11 +183,6 @@ public final class CoverageModelEMAlgorithm<S extends AlleleMetadataProducer & C
                         posteriorErrorNormBias,
                         posteriorErrorNormCopyRatio));
 
-                /* check convergence of the E-step */
-                if (maxPosteriorErrorNorm < params.getPosteriorAbsTol()) {
-                    break;
-                }
-
                 iterEStep++;
             }
 
@@ -204,14 +201,13 @@ public final class CoverageModelEMAlgorithm<S extends AlleleMetadataProducer & C
 
                 /* sequential M-steps */
                 while (iterMStep < params.getMaxMStepCycles()) {
-                    double errorNormMeanTargetBias, errorNormUnexplainedVariance, errorNormARDCoefficients;
+                    double errorNormMeanTargetBias;
+                    double errorNormUnexplainedVariance;
+                    double errorNormARDCoefficients;
 
-                    if (iterInfo.iter == 1) {
-                        /* neglect the contribution from principal components in the first iteration */
-                        runRoutine(() -> updateTargetMeanBias(true), s -> "N/A", "M_STEP_M", iterInfo);
-                    } else {
-                        runRoutine(() -> updateTargetMeanBias(false), s -> "N/A", "M_STEP_M", iterInfo);
-                    }
+                    /* neglect the contribution from principal components in the first iteration */
+                    final boolean ignoreBiasCovariates = iterInfo.iter == 1;
+                    runRoutine(() -> updateTargetMeanBias(ignoreBiasCovariates), s -> "N/A", "M_STEP_M", iterInfo);
                     errorNormMeanTargetBias = iterInfo.errorNorm;
 
                     if (params.psiUpdateEnabled()) {
@@ -223,8 +219,7 @@ public final class CoverageModelEMAlgorithm<S extends AlleleMetadataProducer & C
                     }
 
                     if (updateARDCoefficients) {
-                        runRoutine(this::updateBiasCovariatesARDCoefficients, s -> "N/A",
-                                "M_STEP_ALPHA", iterInfo);
+                        runRoutine(this::updateBiasCovariatesARDCoefficients, s -> "N/A", "M_STEP_ALPHA", iterInfo);
                         errorNormARDCoefficients = iterInfo.errorNorm;
                     } else {
                         errorNormARDCoefficients = 0;
@@ -287,7 +282,7 @@ public final class CoverageModelEMAlgorithm<S extends AlleleMetadataProducer & C
                 performMStep = false; /* so that we end with an E-step */
             }
 
-            iterInfo.increaseIterationCount();
+            iterInfo.incrementIterationCount();
 
             /* checkpointing */
             if (params.isRunCheckpointingEnabled() && iterInfo.iter % params.getRunCheckpointingInterval() == 0) {
@@ -328,8 +323,10 @@ public final class CoverageModelEMAlgorithm<S extends AlleleMetadataProducer & C
 
             /* cycle through E-step mean-field equations until they are satisfied to the desired degree */
             double maxPosteriorErrorNorm;
-            double posteriorErrorNormReadDepth, posteriorErrorNormSampleUnexplainedVariance,
-                    posteriorErrorNormBias, posteriorErrorNormCopyRatio;
+            double posteriorErrorNormReadDepth;
+            double posteriorErrorNormSampleUnexplainedVariance;
+            double posteriorErrorNormBias;
+            double posteriorErrorNormCopyRatio;
 
             runRoutine(this::updateReadDepthLatentPosteriorExpectations, s -> "N/A", "E_STEP_D", iterInfo);
             posteriorErrorNormReadDepth = iterInfo.errorNorm;
@@ -382,7 +379,7 @@ public final class CoverageModelEMAlgorithm<S extends AlleleMetadataProducer & C
                 logger.info("Partial convergence achieved; starting to update copy ratio posteriors in the next iteration");
             }
 
-            iterInfo.increaseIterationCount();
+            iterInfo.incrementIterationCount();
 
             if (params.isRunCheckpointingEnabled() && iterInfo.iter % params.getRunCheckpointingInterval() == 0) {
                 final String posteriorOutputAbsolutePath = new File(params.getRunCheckpointingPath(),
@@ -402,7 +399,7 @@ public final class CoverageModelEMAlgorithm<S extends AlleleMetadataProducer & C
     }
 
     private void performPostEMOperations() {
-        logger.info("EM algorithm status: " + status.message);
+        logger.info("EM algorithm status: " + status.getMessage());
     }
 
     /**
@@ -513,12 +510,20 @@ public final class CoverageModelEMAlgorithm<S extends AlleleMetadataProducer & C
         FAILURE_MAX_ITERS_REACHED(false, "Failure -- maximum iterations reached."),
         SUCCESS_POSTERIOR_CONVERGENCE(true, "Success -- converged in posterior and likelihood change tolerance.");
 
-        final boolean success;
-        final String message;
+        private final boolean success;
+        private final String message;
 
         EMAlgorithmStatus(final boolean success, final String message) {
             this.success = success;
             this.message = message;
+        }
+
+        public String getMessage() {
+            return message;
+        }
+
+        public boolean isSuccessful() {
+            return success;
         }
     }
 
@@ -526,8 +531,9 @@ public final class CoverageModelEMAlgorithm<S extends AlleleMetadataProducer & C
      * This class stores basic info about each iteration of the EM algorithm
      */
     private final class EMAlgorithmIterationInfo {
-        double logLikelihood, errorNorm;
-        int iter;
+        private double logLikelihood;
+        private double errorNorm;
+        private int iter;
 
         EMAlgorithmIterationInfo(final double logLikelihood, final double errorNorm, final int iter) {
             this.logLikelihood = logLikelihood;
@@ -535,9 +541,20 @@ public final class CoverageModelEMAlgorithm<S extends AlleleMetadataProducer & C
             this.iter = iter;
         }
 
-        void increaseIterationCount() {
+        public double getLogLikelihood() {
+            return logLikelihood;
+        }
+
+        public double getErrorNorm() {
+            return errorNorm;
+        }
+
+        public int getIterationCount() {
+            return iter;
+        }
+
+        void incrementIterationCount() {
             iter++;
         }
     }
-
 }

@@ -97,7 +97,7 @@ public class CoverageModelCopyRatioEmissionProbabilityCalculatorUnitTest extends
         final double absAccuracy = FastMath.max(CoverageModelCopyRatioEmissionProbabilityCalculator.ABSOLUTE_ACCURACY,
                 FastMath.abs(expectedLogProbabilityMass) * CoverageModelCopyRatioEmissionProbabilityCalculator.RELATIVE_ACCURACY);
         Assert.assertEquals(CoverageModelCopyRatioEmissionProbabilityCalculator
-                .getLogProbabilityLaplaceApproximationMass(mu, psi), expectedLogProbabilityMass,
+                .getLogProbabilityLaplaceApproximationNormalizationConstant(mu, psi), expectedLogProbabilityMass,
                 absAccuracy);
     }
 
@@ -110,9 +110,9 @@ public class CoverageModelCopyRatioEmissionProbabilityCalculatorUnitTest extends
         final CoverageModelCopyRatioEmissionData emissionData =
                 new CoverageModelCopyRatioEmissionData(mu, psi, (int)readCounts, 0);
         emissionData.setCopyRatioCallingMetadata(CopyRatioCallingMetadata.builder()
-                .setSampleCoverageDepth(1.0)
-                .setSampleSexGenotypeData(new SexGenotypeData("N/A", "N/A", null, null))
-                .setEmissionCalculationStrategy(CopyRatioCallingMetadata.EmissionCalculationStrategy.HYBRID_POISSON_GAUSSIAN)
+                .sampleCoverageDepth(1.0)
+                .sampleSexGenotypeData(new SexGenotypeData("N/A", "N/A", null, null))
+                .emissionCalculationStrategy(CopyRatioCallingMetadata.EmissionCalculationStrategy.HYBRID_POISSON_GAUSSIAN)
                 .build());
         Assert.assertEquals(emissionCalculatorLaplace.logLikelihood(emissionData, 1.0, null), expectedLogLikelihood, absAccuracy);
     }

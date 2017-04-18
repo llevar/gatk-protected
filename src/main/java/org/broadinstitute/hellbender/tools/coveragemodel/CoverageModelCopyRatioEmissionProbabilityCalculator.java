@@ -6,9 +6,9 @@ import org.apache.commons.math3.analysis.interpolation.BicubicInterpolator;
 import org.apache.commons.math3.distribution.PoissonDistribution;
 import org.apache.commons.math3.util.FastMath;
 import org.broadinstitute.barclay.utils.Utils;
-import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.tools.coveragemodel.interfaces.TargetLikelihoodCalculator;
 import org.broadinstitute.hellbender.tools.exome.Target;
+import org.broadinstitute.hellbender.utils.MathUtils;
 import org.broadinstitute.hellbender.utils.param.ParamUtils;
 
 import javax.annotation.Nonnull;
@@ -58,12 +58,12 @@ public final class CoverageModelCopyRatioEmissionProbabilityCalculator implement
     private static double NORMALIZATION_ERROR_TOL = 1e-3;
 
     /**
-     * The approximations are guaranteed to produce results at least with a following relative accuracy
+     * The approximations are guaranteed to produce results at least with the following relative accuracy
      */
     public static double RELATIVE_ACCURACY = 1e-3;
 
     /**
-     * The approximations are guaranteed to produce results at least with a following absolute accuracy
+     * The approximations are guaranteed to produce results at least with the following absolute accuracy
      */
     public static double ABSOLUTE_ACCURACY = 1e-3;
 
@@ -115,30 +115,16 @@ public final class CoverageModelCopyRatioEmissionProbabilityCalculator implement
      * @return emission probability
      */
     @Override
-    public double logLikelihood(@Nonnull CoverageModelCopyRatioEmissionData emissionData,
-                                double copyRatio,
-                                @Nullable Target target) {
+    public double logLikelihood(@Nonnull CoverageModelCopyRatioEmissionData emissionData, double copyRatio, @Nullable Target target) {
         Utils.nonNull(emissionData, "The emission data must be non-null");
         ParamUtils.isPositiveOrZero(copyRatio, "Copy ratio must be non-negative");
 
-        final double logLikelihood;
-        switch (emissionData.getCopyRatioCallingMetadata().getEmissionCalculationStrategy()) {
-            case POISSON:
-                logLikelihood = logLikelihoodPoisson(emissionData, copyRatio);
-                break;
-
-            case HYBRID_POISSON_GAUSSIAN:
-                if (emissionData.getReadCount() >= readCountThresholdPoissonSwitch && copyRatio > 0) {
-                    logLikelihood = logLikelihoodLaplaceApproximation(emissionData, copyRatio);
-                } else {
-                    logLikelihood = logLikelihoodPoisson(emissionData, copyRatio);
-                }
-                break;
-
-            default:
-                throw new GATKException.ShouldNeverReachHereException("The emission calculation model is not" +
-                        " properly set");
-        }
+        final CopyRatioCallingMetadata.EmissionCalculationStrategy strategy =
+                emissionData.getCopyRatioCallingMetadata().getEmissionCalculationStrategy();
+        final boolean usePoisson = strategy.equals(CopyRatioCallingMetadata.EmissionCalculationStrategy.POISSON) ||
+                emissionData.getReadCount() < readCountThresholdPoissonSwitch || copyRatio == 0;
+        final double logLikelihood = usePoisson ? logLikelihoodPoisson(emissionData, copyRatio)
+                                                : logLikelihoodLaplaceApproximation(emissionData, copyRatio);
 
         if (CHECK_FOR_NANS && Double.isNaN(logLikelihood)) {
             throw new RuntimeException("A NaN was produced while calculating the emission probability for" +
@@ -156,21 +142,18 @@ public final class CoverageModelCopyRatioEmissionProbabilityCalculator implement
      * @param copyRatio copy ratio on which the emission probability is conditioned on
      * @return a double value
      */
-    private double logLikelihoodLaplaceApproximation(@Nonnull CoverageModelCopyRatioEmissionData emissionData,
-                                                     double copyRatio) {
+    private double logLikelihoodLaplaceApproximation(@Nonnull final CoverageModelCopyRatioEmissionData emissionData, double copyRatio) {
         final double readDepth = emissionData.getCopyRatioCallingMetadata().getSampleCoverageDepth();
         final double err = emissionData.getMappingErrorProbability();
         final double copyRatioCorrection = err * FastMath.exp(-emissionData.getMu());
         final double mu = emissionData.getMu() + FastMath.log((1 - err) * readDepth * copyRatio +
                 readDepth * copyRatioCorrection);
         final double psi = emissionData.getPsi();
-        if (applyPoissonToGaussianContinuityCorrection) {
-            return getUnnormalizedLogProbabilityLaplaceApproximation((double)emissionData.getReadCount() + 0.5, mu, psi)
-                    - getLogProbabilityLaplaceApproximationMass(mu, psi);
-        } else {
-            return getUnnormalizedLogProbabilityLaplaceApproximation((double)emissionData.getReadCount(), mu, psi)
-                    - getLogProbabilityLaplaceApproximationMass(mu, psi);
-        }
+        final double effectiveReadCount = applyPoissonToGaussianContinuityCorrection
+                ? (double)emissionData.getReadCount() + 0.5
+                : (double)emissionData.getReadCount();
+        return getUnnormalizedLogProbabilityLaplaceApproximation(effectiveReadCount, mu, psi)
+                - getLogProbabilityLaplaceApproximationNormalizationConstant(mu, psi);
     }
 
     /**
@@ -189,8 +172,7 @@ public final class CoverageModelCopyRatioEmissionProbabilityCalculator implement
      * @param copyRatio copy ratio on which the emission probability is conditioned on
      * @return a double value
      */
-    private double logLikelihoodPoisson(@Nonnull CoverageModelCopyRatioEmissionData emissionData,
-                                        double copyRatio) {
+    private double logLikelihoodPoisson(@Nonnull CoverageModelCopyRatioEmissionData emissionData, double copyRatio) {
         final double multBias = FastMath.exp(emissionData.getMu());
         final double readDepth = emissionData.getCopyRatioCallingMetadata().getSampleCoverageDepth();
         final double err = emissionData.getMappingErrorProbability();
@@ -199,17 +181,15 @@ public final class CoverageModelCopyRatioEmissionProbabilityCalculator implement
                 PoissonDistribution.DEFAULT_MAX_ITERATIONS).logProbability(emissionData.getReadCount());
     }
 
-    private static double getUnnormalizedLogProbabilityLaplaceApproximation(final double readCount,
-                                                                            final double mu,
+    private static double getUnnormalizedLogProbabilityLaplaceApproximation(final double readCount, final double mu,
                                                                             final double psi) {
         final double variance = psi + 1.0 / readCount;
         final double logReadCount = FastMath.log(readCount);
-        return - logReadCount - 0.5 * (LOG_2PI + FastMath.log(variance) +
-                FastMath.pow(logReadCount - mu, 2) / variance);
+        return - logReadCount - 0.5 * (LOG_2PI + FastMath.log(variance) + MathUtils.square(logReadCount - mu) / variance);
     }
 
     @VisibleForTesting
-    public static double getLogProbabilityLaplaceApproximationMass(final double mu, final double psi) {
+    static double getLogProbabilityLaplaceApproximationNormalizationConstant(final double mu, final double psi) {
         if (mu > MAXIMUM_ALLOWED_MU) { /* the log norm factor is guaranteed to be smaller than 1e-4 */
             return 0.0;
         } else {
@@ -219,6 +199,12 @@ public final class CoverageModelCopyRatioEmissionProbabilityCalculator implement
         }
     }
 
+    /**
+     * TODO github/gatk-protected issue #855 -- rewrite using org.broadinstitute.hellbender.utils.Utils.stream
+     *
+     * @param inputStream
+     * @return
+     */
     private static double[] loadDoubleArrayTable(final InputStream inputStream) {
         final Scanner reader = new Scanner(inputStream);
         final List<Double> data = new ArrayList<>();
@@ -228,6 +214,12 @@ public final class CoverageModelCopyRatioEmissionProbabilityCalculator implement
         return data.stream().mapToDouble(d -> d).toArray();
     }
 
+    /**
+     * TODO github/gatk-protected issue #855 -- rewrite using org.broadinstitute.hellbender.utils.Utils.stream
+     *
+     * @param inputStream
+     * @return
+     */
     private static double[][] loadDouble2DArrayTable(final InputStream inputStream) {
         final Scanner reader = new Scanner(inputStream);
         final List<double[]> data = new ArrayList<>();

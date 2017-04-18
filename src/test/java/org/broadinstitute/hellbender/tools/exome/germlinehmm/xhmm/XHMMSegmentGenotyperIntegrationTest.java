@@ -9,6 +9,7 @@ import org.broadinstitute.hellbender.tools.exome.Target;
 import org.broadinstitute.hellbender.tools.exome.TargetArgumentCollection;
 import org.broadinstitute.hellbender.tools.exome.germlinehmm.CopyNumberTriState;
 import org.broadinstitute.hellbender.tools.exome.germlinehmm.CopyNumberTriStateAllele;
+import org.broadinstitute.hellbender.utils.GATKProtectedMathUtils;
 import org.broadinstitute.hellbender.utils.QualityUtils;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
 import org.broadinstitute.hellbender.utils.hmm.segmentation.HiddenMarkovModelPostProcessor;
@@ -189,8 +190,8 @@ public class XHMMSegmentGenotyperIntegrationTest extends XHMMSegmentCallerBaseIn
             // Check the PL.
             final int[] PL = genotype.getPL();
             final int observedGQFromPL = Math.min(XHMMSegmentGenotyper.MAX_GQ, PL[CopyNumberTriStateAllele.REF.index()] - PL[CopyNumberTriStateAllele.valueOf(call).index()]);
-            final double expectedCallPL = HiddenMarkovModelPostProcessor.roundPhred(QualityUtils.phredScaleErrorRate(QualityUtils.qualToProb(variantSegment.getSegment().getExactQuality())));
-            final double expectedRefPL = HiddenMarkovModelPostProcessor.roundPhred(QualityUtils.phredScaleCorrectRate(QualityUtils.qualToProb(variantSegment.getSegment().getEventQuality())));
+            final double expectedCallPL = GATKProtectedMathUtils.roundPhred(QualityUtils.phredScaleErrorRate(QualityUtils.qualToProb(variantSegment.getSegment().getExactQuality())), HiddenMarkovModelPostProcessor.PHRED_SCORE_PRECISION);
+            final double expectedRefPL = GATKProtectedMathUtils.roundPhred(QualityUtils.phredScaleCorrectRate(QualityUtils.qualToProb(variantSegment.getSegment().getEventQuality())), HiddenMarkovModelPostProcessor.PHRED_SCORE_PRECISION);
             final int expectedGQFromPL = Math.min(XHMMSegmentGenotyper.MAX_GQ, (int) Math.round(expectedRefPL - expectedCallPL));
             Assert.assertTrue(Math.abs(observedGQFromPL - expectedGQFromPL) <= 1, genotype.toString() + " " + variantSegment.getSegment().getEventQuality());
         }

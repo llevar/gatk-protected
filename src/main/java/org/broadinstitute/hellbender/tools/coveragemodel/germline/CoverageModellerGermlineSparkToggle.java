@@ -87,7 +87,7 @@ public final class CoverageModellerGermlineSparkToggle extends SparkToggleComman
         CALL_ONLY
     }
 
-    private final Logger logger = LogManager.getLogger(CoverageModellerGermlineSparkToggle.class);
+    private static final Logger logger = LogManager.getLogger(CoverageModellerGermlineSparkToggle.class);
 
     public static final String FINAL_MODEL_SUBDIR = "model_final";
     public static final String FINAL_POSTERIORS_SUBDIR = "posteriors_final";

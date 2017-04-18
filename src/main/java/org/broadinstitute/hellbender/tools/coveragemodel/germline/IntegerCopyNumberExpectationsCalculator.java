@@ -270,8 +270,8 @@ public final class IntegerCopyNumberExpectationsCalculator implements
             IntStream.range(0, allTargets.size() - 1).forEach(firstTargetIndex ->
                     cache.cacheTransitionMatrix(
                             (int)Target.calculateDistance(allTargets.get(firstTargetIndex),
-                                    allTargets.get(firstTargetIndex + 1),
-                                    IntegerCopyNumberHiddenMarkovModel.DEFAULT_DISTANCE_BETWEEN_TARGETS),
+                                    allTargets.get(firstTargetIndex + 1)
+                            ),
                             sexGenotype, allTargets.get(firstTargetIndex).getContig()));
         }
     }

@@ -7,15 +7,14 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.math3.util.FastMath;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.exceptions.UserException;
 import org.broadinstitute.hellbender.tools.exome.HashedListTargetCollection;
 import org.broadinstitute.hellbender.tools.exome.Target;
 import org.broadinstitute.hellbender.tools.exome.TargetCollection;
 import org.broadinstitute.hellbender.tools.exome.sexgenotyper.SexGenotypeData;
+import org.broadinstitute.hellbender.utils.GATKProtectedMathUtils;
 import org.broadinstitute.hellbender.utils.IndexRange;
 import org.broadinstitute.hellbender.utils.IntervalUtils;
-import org.broadinstitute.hellbender.utils.QualityUtils;
 import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.hmm.ForwardBackwardAlgorithm;
 import org.broadinstitute.hellbender.utils.hmm.interfaces.CallStringProducer;
@@ -62,17 +61,6 @@ public class HiddenMarkovModelSegmentProcessor<D, S extends CallStringProducer &
      */
     public static final double INDEPENDENT_TARGETS_SEPARATION_THRESHOLD = 0;
 
-    /**
-     * Threshold used to determine best way to calculate log(1- exp(a))
-     * based on https://cran.r-project.org/web/packages/Rmpfr/vignettes/log1mexp-note.pdf
-     */
-    private static final double LN_1_M_EXP_THRESHOLD = - Math.log(2);
-
-    /**
-     * Cached value of ln(10)^-1
-     */
-    private static final double INV_LN_10 = 1.0 / Math.log(10);
-
     private final List<String> sampleNames;
     private final List<SexGenotypeData> sampleSexGenotypes;
     private final BiFunction<SexGenotypeData, Target, S> referenceStateFactory;
@@ -80,12 +68,7 @@ public class HiddenMarkovModelSegmentProcessor<D, S extends CallStringProducer &
     private final List<TargetCollection<T>> sampleTargets;
     private final List<ForwardBackwardAlgorithm.Result<D, T, S>> sampleForwardBackwardResults;
     private final List<List<S>> sampleBestPaths;
-
-    /**
-     * An intermediate result of segment calling -- will be used for VCF creation if an external
-     * segments file is not given
-     */
-    private Map<String, List<HiddenStateSegment<S, T>>> allSegmentsBySampleName = null;
+    private final Map<String, List<HiddenStateSegment<S, T>>> allSegmentsBySampleName;
 
     /**
      * This "master" target collection is the lexicographically sorted union of all targets from all samples
@@ -100,7 +83,7 @@ public class HiddenMarkovModelSegmentProcessor<D, S extends CallStringProducer &
      * @param sampleTargets list of target collection for each sample
      * @param sampleForwardBackwardResults list of forward-backward result for each sample
      * @param sampleBestPaths list of best hidden state sequence call for each sample
-     * @param referenceStateFactory a bi-function from (sex genotype data,
+     * @param referenceStateFactory a bi-function from (sex genotype data, target) to the "reference" state.
      */
     public HiddenMarkovModelSegmentProcessor(
             @Nonnull final List<String> sampleNames,
@@ -114,7 +97,7 @@ public class HiddenMarkovModelSegmentProcessor<D, S extends CallStringProducer &
         numSamples = sampleNames.size();
         Utils.nonNull(sampleNames, "The list of sample names must be non-null");
         Utils.nonNull(sampleSexGenotypes, "The list of sample sex genotypes must be non-null");
-        Utils.nonNull(referenceStateFactory, "The reference state factor must be non-null");
+        Utils.nonNull(referenceStateFactory, "The reference state factory must be non-null");
         Utils.nonNull(sampleTargets, "The list of sample target list must be non-null");
         Utils.nonNull(sampleForwardBackwardResults, "The list of forward-backward results must be non-null");
         Utils.nonNull(sampleBestPaths, "The list of sample best paths must be non-null");
@@ -174,10 +157,6 @@ public class HiddenMarkovModelSegmentProcessor<D, S extends CallStringProducer &
         allSegmentsBySampleName = calculateBestPathSegments();
     }
 
-    /***********************
-     * main public methods *
-     ***********************/
-
     /**
      * Write segments to a table writer
      *
@@ -202,9 +181,7 @@ public class HiddenMarkovModelSegmentProcessor<D, S extends CallStringProducer &
         return segmentList;
     }
 
-    /********************************
-     * segmentation-related methods *
-     ********************************/
+    /* segmentation-related methods */
 
     /**
      * Takes the provided forward-backward result and the best hidden state chain for each sample and
@@ -408,9 +385,7 @@ public class HiddenMarkovModelSegmentProcessor<D, S extends CallStringProducer &
         }
     }
 
-    /****************************************************************************************
-     * methods related to calculating various quality scores, probabilities, and statistics *
-     ****************************************************************************************/
+    /* methods related to calculating various quality scores, probabilities, and statistics */
 
     /**
      * Calculates the probability that some of the targets in the range [firstTargetIndex, firstTargetIndex + segmentLength)
@@ -437,7 +412,7 @@ public class HiddenMarkovModelSegmentProcessor<D, S extends CallStringProducer &
             otherStates.remove(call);
             final List<Set<STATE>> otherStatesConstraints = Collections.nCopies(segmentLength, otherStates);
             final double logOtherStates = fbResult.logConstrainedProbability(firstTargetIndex, otherStatesConstraints);
-            return logProbComplement(logOtherStates);
+            return GATKProtectedMathUtils.logProbComplement(logOtherStates);
         }
     }
 
@@ -571,7 +546,7 @@ public class HiddenMarkovModelSegmentProcessor<D, S extends CallStringProducer &
             for (int ti0 = firstTargetIndex; ti0 < firstTargetIndex + segmentLength; ti0++) {
                 for (int ti1 = ti0 + 1; ti1 < firstTargetIndex + segmentLength; ti1++) {
                     final double distance = Target.calculateDistance(fbResult.positions().get(ti0),
-                            fbResult.positions().get(ti1), Double.POSITIVE_INFINITY);
+                            fbResult.positions().get(ti1));
                     if (distance > INDEPENDENT_TARGETS_SEPARATION_THRESHOLD) {
                         /* independent state approximation */
                         crossCorrSum += 2 * means[ti0 - firstTargetIndex] * means[ti1 - firstTargetIndex];
@@ -597,66 +572,10 @@ public class HiddenMarkovModelSegmentProcessor<D, S extends CallStringProducer &
     }
 
     /**
-     * Calculates the complement of a log probability.
-     *
-     * <p>
-     *     With complement of {@code x} we mean: {@code log(1-log(x))}.
-     * </p>
-     * @param x the input log probability.
-     * @return {@code log(1-log(x))}
+     * See {@link org.broadinstitute.hellbender.utils.GATKProtectedMathUtils#logProbToPhredScore(double, boolean, double, double, double)}
      */
-    public static double logProbComplement(final double x) {
-        return x >= LN_1_M_EXP_THRESHOLD
-                ? Math.log(-Math.expm1(x))
-                : Math.log1p(-Math.exp(x));
-    }
-
-    /**
-     * Transform a log scaled probability (x) into the Phred scaled
-     * equivalent or its complement (1-x) Phred scaled equivalent.
-     * <p>
-     *     This method tolerates probabilities slightly larger than 1.0
-     *     (> 0.0 in log scale) which may occur occasionally due to
-     *     float point calculation rounding.
-     * </p>
-     * <p>
-     *     The value returned is a phred score capped by {@link #MAX_QUAL_SCORE}.
-     * </p>
-     *
-     * @param rawLogProb the probability.
-     * @param complement whether to return the direct Phred transformation ({@code false})
-     *                    or its complement ({@code true)}.
-     * @return a values between 0 and {@link #MAX_QUAL_SCORE}.
-     * @throws GATKException if {@code rawLogProb} is larger than {@link #MAX_LOG_PROB}.
-     */
-    public static double logProbToPhredScore(final double rawLogProb, final boolean complement) {
-        if (rawLogProb > MAX_LOG_PROB) {
-            throw new GATKException(String.format("numerical instability problem: the log-probability is too" +
-                    " large: %g > 0.0 (with maximum tolerance %g)", rawLogProb, MAX_LOG_PROB));
-        }
-        // make sure that the probability is less than 1 in linear scale. there are cases where
-        // log probability exceeds 0.0 due to floating point errors.
-        final double logProbEqOrLessThan0 = Math.min(0.0, rawLogProb);
-
-        // Accurate way to calculate log(1-exp(a))
-        // based on https://cran.r-project.org/web/packages/Rmpfr/vignettes/log1mexp-note.pdf
-        final double finalLogProb = complement
-                ? logProbComplement(logProbEqOrLessThan0)
-                : logProbEqOrLessThan0;
-
-        final double absoluteQualScore = QualityUtils.phredScaleLog10ErrorRate(finalLogProb * INV_LN_10);
-        final double exactValue = Math.min(MAX_QUAL_SCORE, absoluteQualScore);
-        // We round the value to the required precession.
-        return roundPhred(exactValue);
-    }
-
-    /**
-     * Round a Phred scaled score to precision {@link #PHRED_SCORE_PRECISION}
-     *
-     * @param value Phred score
-     * @return rounded Phred score
-     */
-    public static double roundPhred(final double value) {
-        return Math.round(value / PHRED_SCORE_PRECISION) * PHRED_SCORE_PRECISION;
+    private static double logProbToPhredScore(final double rawLogProb, final boolean complement) {
+        return GATKProtectedMathUtils.logProbToPhredScore(rawLogProb, complement, MAX_QUAL_SCORE, MAX_LOG_PROB,
+                PHRED_SCORE_PRECISION);
     }
 }

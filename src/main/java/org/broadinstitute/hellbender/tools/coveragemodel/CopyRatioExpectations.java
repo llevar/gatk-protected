@@ -92,5 +92,4 @@ public final class CopyRatioExpectations implements Serializable {
         ParamUtils.inRange(block.getBegIndex(), 0, numTargets, "Begin index out of range");
         ParamUtils.inRange(block.getEndIndex(), 0, numTargets, "End index out of range");
     }
-
 }

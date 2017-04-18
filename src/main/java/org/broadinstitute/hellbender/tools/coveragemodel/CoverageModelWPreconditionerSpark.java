@@ -28,7 +28,7 @@ import java.util.stream.IntStream;
  */
 public final class CoverageModelWPreconditionerSpark extends GeneralLinearOperator<INDArray> {
 
-    private final Logger logger = LogManager.getLogger(CoverageModelWPreconditionerSpark.class);
+    private static final Logger logger = LogManager.getLogger(CoverageModelWPreconditionerSpark.class);
 
     private final int numLatents, numTargets, fftSize;
     private final FourierLinearOperatorNDArray F_tt;
