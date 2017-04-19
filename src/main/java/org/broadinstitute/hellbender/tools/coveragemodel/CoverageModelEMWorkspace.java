@@ -5,6 +5,7 @@ import com.google.common.collect.Sets;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.ImmutableTriple;
 import org.apache.commons.math3.analysis.UnivariateFunction;
+import org.apache.commons.math3.analysis.solvers.AbstractUnivariateSolver;
 import org.apache.commons.math3.exception.NoBracketingException;
 import org.apache.commons.math3.exception.TooManyEvaluationsException;
 import org.apache.commons.math3.util.FastMath;
@@ -23,18 +24,19 @@ import org.broadinstitute.hellbender.tools.coveragemodel.annotations.CachesRDD;
 import org.broadinstitute.hellbender.tools.coveragemodel.annotations.EvaluatesRDD;
 import org.broadinstitute.hellbender.tools.coveragemodel.annotations.UpdatesRDD;
 import org.broadinstitute.hellbender.tools.coveragemodel.interfaces.CopyRatioExpectationsCalculator;
-import org.broadinstitute.hellbender.tools.coveragemodel.linalg.FourierLinearOperator;
 import org.broadinstitute.hellbender.tools.coveragemodel.linalg.FourierLinearOperatorNDArray;
 import org.broadinstitute.hellbender.tools.coveragemodel.linalg.GeneralLinearOperator;
 import org.broadinstitute.hellbender.tools.coveragemodel.linalg.IterativeLinearSolverNDArray;
 import org.broadinstitute.hellbender.tools.coveragemodel.linalg.IterativeLinearSolverNDArray.ExitStatus;
 import org.broadinstitute.hellbender.tools.coveragemodel.math.RobustBrentSolver;
 import org.broadinstitute.hellbender.tools.coveragemodel.math.SynchronizedUnivariateSolver;
+import org.broadinstitute.hellbender.tools.coveragemodel.math.UnivariateSolverSpecifications;
 import org.broadinstitute.hellbender.tools.coveragemodel.nd4jutils.Nd4jIOUtils;
 import org.broadinstitute.hellbender.tools.exome.*;
 import org.broadinstitute.hellbender.tools.exome.sexgenotyper.GermlinePloidyAnnotatedTargetCollection;
 import org.broadinstitute.hellbender.tools.exome.sexgenotyper.SexGenotypeData;
 import org.broadinstitute.hellbender.tools.exome.sexgenotyper.SexGenotypeDataCollection;
+import org.broadinstitute.hellbender.utils.GATKProtectedMathUtils;
 import org.broadinstitute.hellbender.utils.IndexRange;
 import org.broadinstitute.hellbender.utils.IntervalUtils;
 import org.broadinstitute.hellbender.utils.Utils;
@@ -366,7 +368,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
 
         /* initialize the CNV-avoiding regularizer filter */
         if (params.fourierRegularizationEnabled()) {
-            fourierFactors = FourierLinearOperator.getMidpassFilterFourierFactors(numTargets,
+            fourierFactors = GATKProtectedMathUtils.getMidpassFilterFourierFactors(numTargets,
                     numTargets/params.getMaximumCNVLength(), numTargets/params.getMinimumCNVLength());
         } else {
             fourierFactors = null;
@@ -1082,7 +1084,6 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
         mapWorkers(cb -> cb.cloneWithUpdatedCachesByTag(CoverageModelEMComputeBlock.CoverageModelICGCacheTag.E_STEP_GAMMA));
         cacheWorkers("after E-step for sample unexplained variance initialization");
 
-        final double gammaLowerLimit = 0.0;
         /* create a compound objective function for simultaneous multi-sample queries */
         final java.util.function.Function<Map<Integer, Double>, Map<Integer, Double>> objFunc = arg -> {
             if (arg.isEmpty()) { /* nothing to evaluate */
@@ -1103,14 +1104,17 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
             return output;
         };
 
+        final java.util.function.Function<UnivariateSolverSpecifications, AbstractUnivariateSolver> solverFactory = spec ->
+                new RobustBrentSolver(spec.getRelativeAccuracy(), spec.getAbsoluteAccuracy(),
+                        spec.getFunctionValueAccuracy(), null, params.getGammaSolverNumBisections(),
+                        params.getGammaSolverRefinementDepth());
+
         /* instantiate a synchronized multi-sample root finder and add jobs */
-        final SynchronizedUnivariateSolver syncSolver = new SynchronizedUnivariateSolver(objFunc,
-                numSamples, RobustBrentSolver.MeritPolicy.LARGEST_ROOT, params.getGammaSolverNumBisections(),
-                params.getGammaSolverRefinementDepth());
+        final SynchronizedUnivariateSolver syncSolver = new SynchronizedUnivariateSolver(objFunc, solverFactory, numSamples);
         IntStream.range(0, numSamples)
                 .forEach(si -> {
-                    final double x0 = 0.5 * (gammaLowerLimit + params.getGammaUpperLimit());
-                    syncSolver.add(si, gammaLowerLimit, params.getGammaUpperLimit(), x0,
+                    final double x0 = 0.5 * params.getGammaUpperLimit();
+                    syncSolver.add(si, 0, params.getGammaUpperLimit(), x0,
                             params.getGammaAbsoluteTolerance(), params.getGammaRelativeTolerance(),
                             params.getGammaMaximumIterations());
                 });
@@ -1123,7 +1127,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
             newGammaMap.entrySet().forEach(entry -> {
                 final int sampleIndex = entry.getKey();
                 final SynchronizedUnivariateSolver.UnivariateSolverSummary summary = entry.getValue();
-                double val =  gammaLowerLimit;
+                double val =  0;
                 switch (summary.status) {
                     case SUCCESS:
                         val = summary.x;
@@ -1654,19 +1658,17 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
         final double oldIsotropicPsi = fetchFromWorkers(CoverageModelEMComputeBlock.CoverageModelICGCacheNode.Psi_t, 1)
                 .meanNumber().doubleValue();
 
-        final double psiLowerBound = 0.0;
         final UnivariateFunction objFunc = psi -> mapWorkersAndReduce(cb ->
                 cb.calculateSampleTargetSummedPsiObjectiveFunction(psi), (a, b) -> a + b);
         final UnivariateFunction meritFunc = psi -> mapWorkersAndReduce(cb ->
                 cb.calculateSampleTargetSummedPsiMeritFunction(psi), (a, b) -> a + b);
 
         final RobustBrentSolver solver = new RobustBrentSolver(params.getPsiRelativeTolerance(),
-                params.getPsiAbsoluteTolerance(), CoverageModelGlobalConstants.DEFAULT_FUNCTION_EVALUATION_ACCURACY);
+                params.getPsiAbsoluteTolerance(), CoverageModelGlobalConstants.DEFAULT_FUNCTION_EVALUATION_ACCURACY,
+                meritFunc, params.getPsiSolverNumBisections(), params.getPsiSolverRefinementDepth());
         double newIsotropicPsi;
         try {
-            newIsotropicPsi = solver.solve(params.getPsiMaxIterations(), objFunc, meritFunc, null,
-                    psiLowerBound, params.getPsiUpperLimit(), params.getPsiSolverNumBisections(),
-                    params.getPsiSolverRefinementDepth());
+            newIsotropicPsi = solver.solve(params.getPsiMaxIterations(), objFunc, 0, params.getPsiUpperLimit());
         } catch (NoBracketingException e) {
             logger.warn("Root of M-step optimality equation for isotropic unexplained variance could be bracketed");
             newIsotropicPsi = oldIsotropicPsi;
@@ -1797,7 +1799,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
 
         /* solve */
         long startTime = System.nanoTime();
-        final SubroutineSignal sig = iterSolver.cg(W_tl_old);
+        final SubroutineSignal sig = iterSolver.solveUsingPreconditionedConjugateGradient(W_tl_old);
         linop.cleanupAfter();
         precond.cleanupAfter();
         long endTime = System.nanoTime();
@@ -1811,7 +1813,7 @@ public final class CoverageModelEMWorkspace<STATE extends AlleleMetadataProducer
                     " and/or decrease absolute/relative error tolerances");
         }
         final int iters = sig.<Integer>get("iterations");
-        final INDArray W_tl_new = sig.<INDArray>get("x");
+        final INDArray W_tl_new = sig.get("x");
 
         switch (params.getBiasCovariatesComputeNodeCommunicationPolicy()) {
             case BROADCAST_HASH_JOIN:

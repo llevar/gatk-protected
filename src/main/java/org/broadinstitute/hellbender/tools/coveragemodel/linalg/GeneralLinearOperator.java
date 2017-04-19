@@ -45,7 +45,7 @@ public abstract class GeneralLinearOperator<VECTOR> {
      * @param x the vector to operate on
      * @return the product of the transpose of {@code this} instance with
      * {@code x}
-     * @throws org.apache.commons.math3.exception.DimensionMismatchException
+     * @throws DimensionMismatchException
      * if the row dimension does not match the size of {@code x}
      * @throws UnsupportedOperationException if this operation is not supported
      * by {@code this} operator
@@ -92,6 +92,9 @@ public abstract class GeneralLinearOperator<VECTOR> {
         throw new UnsupportedOperationException();
     }
 
+    /**
+     * Performs clean up after a call to {@link #operate(Object)} such as null-referencing
+     * unnecessary members, unpersisting RDD caches, etc)
+     */
     public void cleanupAfter() {}
-
 }

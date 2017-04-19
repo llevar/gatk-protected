@@ -14,6 +14,8 @@ import org.testng.annotations.Test;
 
 public class FourierLinearOperatorNDArrayUnitTest extends BaseTest {
 
+    private static final double EPS = 1e-8;
+
     @DataProvider(name = "testDataWithoutZeroPadding")
     public Object[][] getTestDataWithoutZeroPadding() {
         return new Object[][] {
@@ -89,7 +91,7 @@ public class FourierLinearOperatorNDArrayUnitTest extends BaseTest {
     public void performTestWithoutZeroPadding(final int dim, final double[] fourierFacts, final double[] x, final double[] y) {
         FourierLinearOperatorNDArray linOp = new FourierLinearOperatorNDArray(dim, fourierFacts, false);
         final double[] yCalc = linOp.operate(Nd4j.create(x)).data().asDouble();
-        Assert.assertArrayEquals("", y, yCalc, 1e-8);
+        Assert.assertArrayEquals(y, yCalc, EPS);
     }
 
     /**
@@ -103,26 +105,26 @@ public class FourierLinearOperatorNDArrayUnitTest extends BaseTest {
     public void performTestWithZeroPadding(final int dim, final double[] fourierFacts, final double[] x, final double[] y) {
         FourierLinearOperatorNDArray linOp = new FourierLinearOperatorNDArray(dim, fourierFacts, true);
         final double[] yCalc = linOp.operate(Nd4j.create(x)).data().asDouble();
-        Assert.assertArrayEquals("", y, yCalc, 1e-8);
+        Assert.assertArrayEquals(y, yCalc, EPS);
     }
 
 
     @Test(expectedExceptions = IllegalArgumentException.class)
     public void testBadDimension_0() {
         /* negative dimensions not allowed */
-        FourierLinearOperatorNDArray linop = new FourierLinearOperatorNDArray(-1, new double[5], false);
+        new FourierLinearOperatorNDArray(-1, new double[5], false);
     }
 
     @Test(expectedExceptions = IllegalArgumentException.class)
     public void testBadDimension_1() {
         /* dimension >= 2 */
-        FourierLinearOperatorNDArray linop = new FourierLinearOperatorNDArray(1, new double[5], false);
+        new FourierLinearOperatorNDArray(1, new double[5], false);
     }
 
     @Test(expectedExceptions = IllegalArgumentException.class)
     public void testBadDimension_2() {
         /* fourierFactors.length = floor(dimension/2) + 1 */
-        FourierLinearOperatorNDArray linop = new FourierLinearOperatorNDArray(15, new double[3], false);
+        new FourierLinearOperatorNDArray(15, new double[3], false);
     }
 
 }

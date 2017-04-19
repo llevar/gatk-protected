@@ -3,6 +3,7 @@ package org.broadinstitute.hellbender.tools.coveragemodel;
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.ImmutableTriple;
+import org.apache.commons.math3.analysis.UnivariateFunction;
 import org.apache.commons.math3.exception.NoBracketingException;
 import org.apache.commons.math3.exception.TooManyEvaluationsException;
 import org.apache.commons.math3.util.FastMath;
@@ -998,14 +999,16 @@ public final class CoverageModelEMComputeBlock {
                 return IntStream.range(0, numTargets)
                         .parallel()
                         .mapToObj(ti -> {
+                            final UnivariateFunction objFunc = psi ->
+                                    calculatePsiSolverObjectiveFunction(ti, psi, M_st, Sigma_st, gamma_s, B_st);
+                            final UnivariateFunction meritFunc = psi ->
+                                    calculatePsiSolverMeritFunction(ti, psi, M_st, Sigma_st, gamma_s, B_st);
                             final RobustBrentSolver solver = new RobustBrentSolver(relTol, absTol,
-                                    CoverageModelGlobalConstants.DEFAULT_FUNCTION_EVALUATION_ACCURACY);
+                                    CoverageModelGlobalConstants.DEFAULT_FUNCTION_EVALUATION_ACCURACY,
+                                    meritFunc, numBisections, refinementDepth);
                             double newPsi;
                             try {
-                                newPsi = solver.solve(maxIters,
-                                        psi -> calculatePsiSolverObjectiveFunction(ti, psi, M_st, Sigma_st, gamma_s, B_st),
-                                        psi -> calculatePsiSolverMeritFunction(ti, psi, M_st, Sigma_st, gamma_s, B_st),
-                                        null, 0, psiUpperLimit, numBisections, refinementDepth);
+                                newPsi = solver.solve(maxIters, objFunc, 0, psiUpperLimit);
                             } catch (NoBracketingException | TooManyEvaluationsException e) {
                             /* if a solution can not be found, set Psi to its old value */
                                 newPsi = Psi_t.getDouble(ti);

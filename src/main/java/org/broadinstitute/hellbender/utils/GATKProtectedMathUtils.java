@@ -8,6 +8,7 @@ import org.apache.commons.math3.stat.descriptive.rank.Percentile;
 import org.apache.commons.math3.util.FastMath;
 import org.apache.commons.math3.util.Pair;
 import org.broadinstitute.hellbender.exceptions.GATKException;
+import org.broadinstitute.hellbender.tools.coveragemodel.linalg.FourierLinearOperator;
 import org.broadinstitute.hellbender.utils.param.ParamUtils;
 
 import javax.annotation.Nonnull;
@@ -412,5 +413,22 @@ public class GATKProtectedMathUtils implements Serializable {
      */
     public static double roundPhred(final double value, final double phredScorePrecision) {
         return Math.round(value / phredScorePrecision) * phredScorePrecision;
+    }
+
+    /**
+     * Generate Fourier factors for a midpass filter; refer to {@link FourierLinearOperator}
+     *
+     * @param dimension dimension of the signal
+     * @param freqLowerCutoff lower frequency cutoff (excluded)
+     * @param freqUpperCutoff upper frequency cutoff (included)
+     * @return Fourier factors
+     */
+    public static double[] getMidpassFilterFourierFactors(final int dimension, final int freqLowerCutoff,
+                                                          final int freqUpperCutoff) {
+        ParamUtils.isPositiveOrZero(freqUpperCutoff - freqLowerCutoff, "Upper cutoff must be >= lower cutoff.");
+        ParamUtils.isPositive(dimension/2 + 1 - freqUpperCutoff, "For dimension " + dimension +
+                ", the upper frequency cutoff must be <= " + (dimension/2));
+        return IntStream.range(0, dimension/2 + 1)
+                .mapToDouble(i -> i > freqLowerCutoff && i <= freqUpperCutoff ? 1.0 : 0).toArray();
     }
 }

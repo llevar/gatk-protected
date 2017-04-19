@@ -57,11 +57,6 @@ public final class SynchronizedUnivariateSolver {
      */
     private static final double DEFAULT_FUNCTION_ACCURACY = 1e-15;
 
-    private enum SolverClass {
-        ABSTRACT_UNIVARIATE_SOLVER,
-        ROBUST_BRENT_SOLVER
-    }
-
     /**
      * Stores queries from instantiated solvers
      */
@@ -82,10 +77,6 @@ public final class SynchronizedUnivariateSolver {
      */
     private final Function<Map<Integer, Double>, Map<Integer, Double>> func;
 
-    private final SolverClass solverClass;
-    private final int numBisections, depth;
-    private final RobustBrentSolver.MeritPolicy meritPolicy;
-
     /**
      * A list of solver jobs
      */
@@ -98,11 +89,10 @@ public final class SynchronizedUnivariateSolver {
     private final Condition resultsAvailable = resultsLock.newCondition();
     private CountDownLatch solversCountDownLatch;
 
-
     /**
      * Public constructor for invoking one of {@link AbstractUnivariateSolver}
      *
-     * @param func the objective function (must be able to evaluate multiple calls in one shot)
+     * @param func the objective function (must be able to evaluate multiple univariate functions in one query)
      * @param numberOfQueriesBeforeCalling Number of queries before making a function call (the default value is
      *                                     the number of equations)
      */
@@ -113,40 +103,6 @@ public final class SynchronizedUnivariateSolver {
         this.solverFactory = Utils.nonNull(solverFactory);
         this.numberOfQueriesBeforeCalling = ParamUtils.isPositive(numberOfQueriesBeforeCalling, "Number of queries" +
                 " before calling function evaluations must be positive");
-
-        solverClass = SolverClass.ABSTRACT_UNIVARIATE_SOLVER;
-        meritPolicy = null;
-        numBisections = 0;
-        depth = 0;
-
-        queries = new ConcurrentHashMap<>(numberOfQueriesBeforeCalling);
-        results = new ConcurrentHashMap<>(numberOfQueriesBeforeCalling);
-        jobDescriptions = new ArrayList<>();
-        solverDescriptions = new ArrayList<>();
-        jobIndices = new HashSet<>();
-    }
-
-    /**
-     * Public constructor for invoking {@link RobustBrentSolver} with a given MeritPolicy (merit functions
-     * are not supported)
-     *
-     * @param func the objective function (must be able to evaluate multiple calls in one shot)
-     * @param numberOfQueriesBeforeCalling Number of queries before making a function call (the default value is
-     *                                     the number of equations)
-     */
-    public SynchronizedUnivariateSolver(final Function<Map<Integer, Double>, Map<Integer, Double>> func,
-                                        final int numberOfQueriesBeforeCalling,
-                                        final RobustBrentSolver.MeritPolicy meritPolicy,
-                                        final int numBisections, final int depth) {
-        this.func = Utils.nonNull(func);
-        this.solverFactory = null;
-        this.numberOfQueriesBeforeCalling = ParamUtils.isPositive(numberOfQueriesBeforeCalling, "Number of queries" +
-                " before calling function evaluations must be positive");
-
-        solverClass = SolverClass.ROBUST_BRENT_SOLVER;
-        this.meritPolicy = meritPolicy;
-        this.numBisections = numBisections;
-        this.depth = depth;
 
         queries = new ConcurrentHashMap<>(numberOfQueriesBeforeCalling);
         results = new ConcurrentHashMap<>(numberOfQueriesBeforeCalling);
@@ -322,58 +278,28 @@ public final class SynchronizedUnivariateSolver {
 
         @Override
         public void run() {
-            double sol = Double.NaN;
-
-            switch (solverClass) {
-                case ABSTRACT_UNIVARIATE_SOLVER:
-                    final AbstractUnivariateSolver abstractSolver = solverFactory.apply(solverDescription);
+            double sol;
+            final AbstractUnivariateSolver abstractSolver = solverFactory.apply(solverDescription);
+            try {
+                sol = abstractSolver.solve(jobDescription.getMaxEvaluations(), x -> {
+                    final double value;
                     try {
-                        sol = abstractSolver.solve(jobDescription.getMaxEvaluations(), x -> {
-                            final double value;
-                            try {
-                                value = evaluate(jobDescription.getIndex(), x);
-                            } catch (final InterruptedException ex) {
-                                throw new RuntimeException(String.format("Evaluation of equation (n=%d) was interrupted --" +
-                                        " can not continue", jobDescription.getIndex()));
-                            }
-                            return value;
-                        }, jobDescription.getMin(), jobDescription.getMax(), jobDescription.getInitialGuess());
-                        status = UnivariateSolverStatus.SUCCESS;
-                    } catch (final NoBracketingException ex) {
-                        status = UnivariateSolverStatus.NO_BRACKETING;
-                        sol = Double.NaN;
-                    } catch (final TooManyEvaluationsException ex) {
-                        status = UnivariateSolverStatus.TOO_MANY_EVALUATIONS;
-                        sol = Double.NaN;
+                        value = evaluate(jobDescription.getIndex(), x);
+                    } catch (final InterruptedException ex) {
+                        throw new RuntimeException(String.format("Evaluation of equation (n=%d) was interrupted --" +
+                                " can not continue", jobDescription.getIndex()));
                     }
-                    summary = new UnivariateSolverSummary(sol, abstractSolver.getEvaluations(), status);
-                    break;
-
-                case ROBUST_BRENT_SOLVER:
-                    final RobustBrentSolver robustSolver = new RobustBrentSolver(solverDescription.getRelativeAccuracy(),
-                            solverDescription.getAbsoluteAccuracy(), solverDescription.getFunctionValueAccuracy());
-                    try {
-                        sol = robustSolver.solve(jobDescription.getMaxEvaluations(), x -> {
-                            final double value;
-                            try {
-                                value = evaluate(jobDescription.getIndex(), x);
-                            } catch (final InterruptedException ex) {
-                                throw new RuntimeException(String.format("Evaluation of equation (n=%d) was interrupted --" +
-                                        " can not continue", jobDescription.getIndex()));
-                            }
-                            return value;
-                        }, null, meritPolicy, jobDescription.getMin(), jobDescription.getMax(), numBisections, depth);
-                        status = UnivariateSolverStatus.SUCCESS;
-                    } catch (final NoBracketingException ex) {
-                        status = UnivariateSolverStatus.NO_BRACKETING;
-                        sol = Double.NaN;
-                    } catch (final TooManyEvaluationsException ex) {
-                        status = UnivariateSolverStatus.TOO_MANY_EVALUATIONS;
-                        sol = Double.NaN;
-                    }
-                    summary = new UnivariateSolverSummary(sol, robustSolver.getEvaluations(), status);
-                    break;
+                    return value;
+                }, jobDescription.getMin(), jobDescription.getMax(), jobDescription.getInitialGuess());
+                status = UnivariateSolverStatus.SUCCESS;
+            } catch (final NoBracketingException ex) {
+                status = UnivariateSolverStatus.NO_BRACKETING;
+                sol = Double.NaN;
+            } catch (final TooManyEvaluationsException ex) {
+                status = UnivariateSolverStatus.TOO_MANY_EVALUATIONS;
+                sol = Double.NaN;
             }
+                    summary = new UnivariateSolverSummary(sol, abstractSolver.getEvaluations(), status);
             solversCountDownLatch.countDown();
             fetchResults();
         }

@@ -12,7 +12,22 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 
 /**
- * A basic implementation for iterative linear system solvers
+ * A basic implementation for iterative linear system solvers using Nd4j as the liner algebra backend.
+ * The class currently provides the preconditioned conjugate gradient solver; see {@link #solveUsingPreconditionedConjugateGradient(INDArray)}.
+ *
+ * This class is useful for solving linear system of equations $Ax = b$ where $A$ is an instance of
+ * {@link GeneralLinearOperator<INDArray>} and represents a symmetric positive-definite linear operator.
+ *
+ * Common uses cases are:
+ *
+ *   - when $A$ is _not_ specified by a dense block matrix representation (e.g. for efficiency or memory
+ *     constraints), though, the linear operator can be applied to an arbitrary vector _algorithmically_.
+ *
+ *   - when a decent preconditioner exists (e.g. $A$ is roughly diagonal so that the inverse of the diagonal
+ *     part can be used as a preconditioner)
+ *
+ *   - when a decent guess for the solution vector $x$ is already available, and one requires an approximate
+ *     refinement within specified relative/absolute tolerance of the exact solution.
  *
  * @author Mehrtash Babadi &lt;mehrtash@broadinstitute.org&gt;
  */
@@ -24,7 +39,8 @@ public final class IterativeLinearSolverNDArray {
     private final Function<INDArray, Double> normFunc;
     private final BiFunction<INDArray, INDArray, Double> innerProductFunc;
     private final boolean performDetailedChecks;
-    private final double absTol, relTol;
+    private final double absTol;
+    private final double relTol;
     private final int maxIters;
 
     public enum ExitStatus {
@@ -34,7 +50,7 @@ public final class IterativeLinearSolverNDArray {
     }
 
     /**
-     * Constructor
+     * Constructs the iterative solver.
      *
      * @param linop a linear operator (a rank-2 matrix or an abstract operator)
      * @param b rhs vector (a rank-1 object)
@@ -44,7 +60,8 @@ public final class IterativeLinearSolverNDArray {
      * @param maxIters maximum iterations
      * @param normFunc a norm function
      * @param innerProductFunc an inner product function
-     * @param performDetailedChecks perform detailed checks
+     * @param performDetailedChecks perform detailed checks (has different meaning in different solvers)
+     *                              refer to the documentation of a specific solver
      */
     public IterativeLinearSolverNDArray(@Nonnull final GeneralLinearOperator<INDArray> linop,
                                         @Nonnull final INDArray b,
@@ -80,13 +97,28 @@ public final class IterativeLinearSolverNDArray {
     }
 
     /**
-     * Preconditioned conjugate gradients method
+     * Solve using the preconditioned conjugate gradient method. The implementation is based on:
+     *
+     * <dt><a id="BARR1994">Barret et al. (1994)</a></dt>
+     * <dd>R. Barrett, M. Berry, T. F. Chan, J. Demmel, J. M. Donato, J. Dongarra,
+     * V. Eijkhout, R. Pozo, C. Romine and H. Van der Vorst,
+     * <a href="http://www.netlib.org/linalg/html_templates/Templates.html"><em>
+     * Templates for the Solution of Linear Systems: Building Blocks for Iterative
+     * Methods</em></a>, SIAM</dd>
+     *
+     * If {@link #performDetailedChecks} is true, the (required) positive-definiteness condition
+     * on the linear operator is checked during each iteration (with no computation cost) and an
+     * exception is thrown if the condition is violated.
+     *
+     * The final solution is contained in the output {@link SubroutineSignal}, along with the norm
+     * of the residual vector, exit status, etc; see {@link #generateConjugateGradientsSubroutineSignal}
      *
      * @param x0 initial guess
-     * @return an instance of {@link SubroutineSignal}
-     * @throws IllegalArgumentException for bad intial guess or illegla linear operators
+     * @return an instance of {@link SubroutineSignal} containing the solution and residual error
+     * @throws IllegalArgumentException for bad initial guess or illegal linear operators
+     * @throws NonPositiveDefiniteOperatorException if the linear operator is deemed to be non-positive-definite
      */
-    public SubroutineSignal cg(@Nonnull final INDArray x0)
+    public SubroutineSignal solveUsingPreconditionedConjugateGradient(@Nonnull final INDArray x0)
             throws IllegalArgumentException {
         if (x0.length() != linop.getRowDimension()) {
             throw new IllegalArgumentException("The initial guess has wrong dimensions");
@@ -110,7 +142,7 @@ public final class IterativeLinearSolverNDArray {
         }
         double rnorm = normFunc.apply(r);
         if (rnorm <= rmax) {
-            return generateCGSignal(x, iter, rnorm, rmax, ExitStatus.SUCCESS_REL_TOL);
+            return generateConjugateGradientsSubroutineSignal(x, iter, rnorm, rmax, ExitStatus.SUCCESS_REL_TOL);
         }
 
         double rhoPrev = 0;
@@ -146,20 +178,20 @@ public final class IterativeLinearSolverNDArray {
             rhoPrev = rhoNext;
             rnorm = normFunc.apply(r);
             if (rnorm <= rmax) {
-                return generateCGSignal(x, iter, rnorm, rmax, ExitStatus.SUCCESS_REL_TOL);
+                return generateConjugateGradientsSubroutineSignal(x, iter, rnorm, rmax, ExitStatus.SUCCESS_REL_TOL);
             }
             if (rnorm <= absTol) {
-                return generateCGSignal(x, iter, rnorm, rmax, ExitStatus.SUCCESS_ABS_TOL);
+                return generateConjugateGradientsSubroutineSignal(x, iter, rnorm, rmax, ExitStatus.SUCCESS_ABS_TOL);
             }
             iter += 1;
             if (iter >= maxIters) {
-                return generateCGSignal(x, iter, rnorm, rmax, ExitStatus.FAIL_MAX_ITERS);
+                return generateConjugateGradientsSubroutineSignal(x, iter, rnorm, rmax, ExitStatus.FAIL_MAX_ITERS);
             }
         }
     }
 
     /**
-     * Generate an exit signal for {@link #cg(INDArray)}
+     * Generate an exit signal for {@link #solveUsingPreconditionedConjugateGradient(INDArray)}
      *
      * @param x solution
      * @param iter number of iterations
@@ -168,11 +200,11 @@ public final class IterativeLinearSolverNDArray {
      * @param status the exist status of the solver
      * @return a instance of {@link SubroutineSignal}
      */
-    private static SubroutineSignal generateCGSignal(@Nonnull final INDArray x,
-                                                    final int iter,
-                                                    final double resNorm,
-                                                    final double resNormThreshold,
-                                                    @Nonnull final ExitStatus status) {
+    private static SubroutineSignal generateConjugateGradientsSubroutineSignal(@Nonnull final INDArray x,
+                                                                               final int iter,
+                                                                               final double resNorm,
+                                                                               final double resNormThreshold,
+                                                                               @Nonnull final ExitStatus status) {
         return SubroutineSignal.builder()
                 .put("x", x)
                 .put("iterations", iter)
