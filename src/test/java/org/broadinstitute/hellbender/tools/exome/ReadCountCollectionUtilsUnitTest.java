@@ -400,29 +400,6 @@ public class ReadCountCollectionUtilsUnitTest {
         }
     }
 
-    @DataProvider(name="readCountAndPercentileData")
-    public Object[][] readCountAndPercentileData() {
-        final double[] percentiles = new double[] { 1.0, 2.5, 5.0 , 10.0, 25.0 };
-        final List<Object[]> result = new ArrayList<>();
-        final Random rdn = new Random(13);
-        final int columnCount = 100;
-        final int targetCount = 100;
-        final List<String> columnNames = IntStream.range(0, columnCount).mapToObj(i -> "sample_" + (i + 1)).collect(Collectors.toList());
-        final List<Target> targets = IntStream.range(0, targetCount).mapToObj(i -> new Target("target_" + (i+1))).collect(Collectors.toList());
-        for (final double percentile : percentiles) {
-            final double[][] counts = new double[columnCount][targetCount];
-            for (int i = 0; i < counts.length; i++) {
-                for (int j = 0; j < counts[0].length; j++) {
-                    counts[i][j] = rdn.nextDouble();
-                }
-            }
-            final ReadCountCollection readCounts = new ReadCountCollection(targets, columnNames,
-                    new Array2DRowRealMatrix(counts, false));
-            result.add(new Object[]{readCounts, percentile});
-        }
-        return result.toArray(new Object[result.size()][]);
-    }
-
     @DataProvider(name="tooManyZerosData")
     public Object[][] tooManyZerosData() {
         final double[] zeroProbabilities = new double[] { .001, .01, .02, 0.1 };
