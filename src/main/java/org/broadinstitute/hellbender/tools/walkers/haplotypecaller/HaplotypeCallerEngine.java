@@ -64,9 +64,17 @@ public final class HaplotypeCallerEngine implements AssemblyRegionEvaluator {
 
     private final SAMFileHeader readsHeader;
 
+    public ReferenceConfidenceModel getReferenceConfidenceModel() {
+        return referenceConfidenceModel;
+    }
+
     private ReferenceConfidenceModel referenceConfidenceModel = null;
 
     private AssemblyRegionTrimmer trimmer = new AssemblyRegionTrimmer();
+
+    public MinimalGenotypingEngine getActiveRegionEvaluationGenotyperEngine() {
+        return activeRegionEvaluationGenotyperEngine;
+    }
 
     // the genotyping engine for the isActive() determination
     private MinimalGenotypingEngine activeRegionEvaluationGenotyperEngine = null;
@@ -86,6 +94,11 @@ public final class HaplotypeCallerEngine implements AssemblyRegionEvaluator {
     private Optional<HaplotypeBAMWriter> haplotypeBAMWriter;
 
     private Set<String> sampleSet;
+
+    public SampleList getSamplesList() {
+        return samplesList;
+    }
+
     private SampleList samplesList;
 
     private byte minTailQuality;
